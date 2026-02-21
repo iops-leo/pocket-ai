@@ -29,6 +29,9 @@ Thumbs.db
 *.log
 logs/
 
+# Docs (설계 문서는 로컬만)
+docs/
+
 # Claude Code
 .claude/
 .omc/
