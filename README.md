@@ -9,7 +9,7 @@
 - **세션 연속성**: 출퇴근길, 회의 중에도 PC 작업 이어서 진행
 - **데몬 방식**: 터미널을 닫아도 백그라운드에서 세션 유지
 - **비용 최적화**: 초기 무료~$8/월, 성장 후 사용량 기반 과금
-- **간편한 설정**: GitHub/Google OAuth 로그인 후 QR 코드 스캔으로 디바이스 페어링
+- **간편한 설정**: GitHub OAuth 로그인 후 QR 코드 스캔으로 디바이스 페어링
 - **E2E 암호화**: 서버는 암호화된 메시지만 중계 (복호화 불가)
 
 ## 아키텍처
@@ -84,7 +84,7 @@ pocket-ai codex          # `codex` 대신 실행
 ```bash
 # Remote Agent 설치
 npm install -g @pocket-ai/agent
-pocket-ai-agent auth     # OAuth 로그인 (GitHub/Google)
+pocket-ai-agent auth     # GitHub OAuth 로그인
 pocket-ai-agent list     # 세션 목록
 pocket-ai-agent send <session-id> "message"
 ```
@@ -92,7 +92,7 @@ pocket-ai-agent send <session-id> "message"
 ### PWA 접속 및 디바이스 페어링
 
 1. 브라우저에서 https://pocket-ai.app 접속
-2. GitHub 또는 Google OAuth로 계정 생성/로그인
+2. GitHub OAuth로 계정 생성/로그인
 3. PC에서 `pocket-ai start` 실행 → QR 코드 표시
 4. PWA에서 QR 코드 스캔 → PC 디바이스 페어링 완료
 5. E2E 암호화 키가 자동으로 교환되어 연결!
@@ -122,7 +122,7 @@ pocket-ai-agent send <session-id> "message"
 
 ### Phase 1: MVP (무료~$8/월)
 - 개인 사용자 타겟
-- CLI + Server + PWA + OAuth 로그인 (GitHub/Google) + QR 디바이스 페어링 + E2E 암호화 + 데몬
+- CLI + Server + PWA + GitHub OAuth 로그인 + QR 디바이스 페어링 + E2E 암호화 + 데몬
 
 ### Phase 2: Pro ($10-20/월)
 - 푸시 알림
@@ -153,7 +153,7 @@ pocket-ai-agent send <session-id> "message"
 - [ ] `@pocket-ai/cli` 구현 (Claude Code 래핑 + 데몬)
 - [ ] Socket.IO 릴레이 서버 (Fastify + Prisma + PostgreSQL)
 - [ ] PWA 클라이언트 (채팅 UI)
-- [ ] OAuth 로그인 (GitHub/Google) + JWT 인증
+- [ ] GitHub OAuth 로그인 + JWT 인증
 - [ ] QR 코드 디바이스 페어링 + E2E 암호화 키 교환
 - [ ] AES-256-GCM E2E 암호화
 - [ ] 로컬/원격 모드 전환

@@ -87,7 +87,7 @@ pocket-ai/
 - 키 관리 (생성, QR 전달, 폐기)
 - 서버 Blind Relay 원칙
 - 위협 모델 (5가지 시나리오)
-- OAuth 로그인 (GitHub/Google) + JWT + QR 디바이스 페어링
+- OAuth 로그인 (GitHub) + JWT + QR 디바이스 페어링
 - 보안 체크리스트
 
 ### 5. docs/API.md
@@ -115,7 +115,7 @@ pocket-ai/
 
 ### 2. OAuth 로그인 + QR 디바이스 페어링
 인증과 페어링이 명확하게 분리:
-1. 사용자가 GitHub/Google OAuth로 계정 생성/로그인 → JWT 발급
+1. 사용자가 GitHub OAuth로 계정 생성/로그인 → JWT 발급
 2. CLI가 256-bit 랜덤 암호화 키 생성 + QR 코드 표시
 3. PWA(JWT 보유)가 QR 스캔 → 암호화 키 + sessionId 획득 + 디바이스 페어링
 4. 동일한 키로 AES-256-GCM E2E 암호화

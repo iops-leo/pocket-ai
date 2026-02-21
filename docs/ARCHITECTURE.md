@@ -137,7 +137,7 @@ apps/server/
 │   ├── index.ts              # 서버 진입점
 │   ├── routes/
 │   │   ├── health.ts         # 헬스체크
-│   │   ├── auth.ts           # OAuth (GitHub/Google) + JWT 인증
+│   │   ├── auth.ts           # OAuth (GitHub) + JWT 인증
 │   │   └── pairing.ts        # QR 코드 디바이스 페어링 + 암호화 키 교환
 │   ├── socket/
 │   │   ├── handler.ts        # Socket.IO 이벤트 핸들러
@@ -420,7 +420,7 @@ packages/agent/
 ```
 
 **핵심 기능**:
-- `pocket-ai-agent auth` - OAuth 로그인 (GitHub/Google) + JWT 토큰 저장
+- `pocket-ai-agent auth` - OAuth 로그인 (GitHub) + JWT 토큰 저장
 - `pocket-ai-agent list` - 활성 세션 목록 조회
 - `pocket-ai-agent send <session-id> <message>` - 메시지 전송
 - `pocket-ai-agent attach <session-id>` - 세션에 실시간 연결
@@ -507,7 +507,7 @@ type SessionEvent =
 PWA (사용자 폰)                  Server                  PC (CLI Package)
     │                               │                          │
     ├── 1. OAuth 로그인 ────────────>│                          │
-    │   (GitHub/Google)              │                          │
+    │   (GitHub)              │                          │
     │                               ├── JWT 발급                │
     │<──────── JWT 반환 ─────────────┤                          │
     │                               │                          │
@@ -541,7 +541,7 @@ PWA (사용자 폰)                  Server                  PC (CLI Package)
 ```
 
 **핵심**:
-- 사용자 인증은 OAuth (GitHub/Google) + JWT (QR이 아님)
+- 사용자 인증은 OAuth (GitHub) + JWT (QR이 아님)
 - QR 코드는 디바이스 페어링 + E2E 암호화 키 교환에만 사용
 - 대칭키는 QR 코드로만 전달 (서버 모름)
 - 서버는 JWT로 사용자 신원을 확인하고 PC를 계정에 연결

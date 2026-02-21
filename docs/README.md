@@ -69,7 +69,7 @@ API 레퍼런스
 ## 핵심 컨셉
 
 ### 인증 구조
-- **사용자 인증**: GitHub/Google OAuth + JWT (QR은 인증 수단이 아님)
+- **사용자 인증**: GitHub OAuth + JWT (QR은 인증 수단이 아님)
 - **디바이스 페어링**: QR 코드로 PC↔폰 연결 + E2E 암호화 키 교환
 - JWT는 모든 API 및 Socket.IO 연결에 필수
 

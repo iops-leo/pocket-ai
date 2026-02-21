@@ -114,21 +114,6 @@ GET /auth/github/callback?code=xxx&state=yyy
 
 ---
 
-#### Google OAuth 로그인
-
-```http
-GET /auth/google
-```
-
-사용자를 Google OAuth 인증 페이지로 리다이렉트합니다.
-
-**콜백**:
-```http
-GET /auth/google/callback?code=xxx&state=yyy
-```
-
----
-
 #### 토큰 갱신
 
 ```http
@@ -1154,8 +1139,6 @@ export interface SessionMetadata {
 ```typescript
 // PWA에서 GitHub OAuth 로그인
 window.location.href = 'https://api.pocket-ai.app/auth/github'
-// 또는 Google
-window.location.href = 'https://api.pocket-ai.app/auth/google'
 
 // 콜백 후 JWT 획득 → localStorage 또는 httpOnly 쿠키에 저장
 const { token } = await response.json()
@@ -1570,7 +1553,6 @@ Pocket AI API는 REST + Socket.IO 하이브리드 구조로, 세션 수명주기
 | 구분 | 엔드포인트 | 용도 |
 |------|-----------|------|
 | **인증** | `GET /auth/github` | GitHub OAuth 로그인 |
-| | `GET /auth/google` | Google OAuth 로그인 |
 | | `POST /auth/refresh` | JWT 갱신 |
 | | `POST /auth/logout` | 로그아웃 |
 | **세션** | `POST /api/sessions` | 세션 생성 (CLI, JWT 필요) |
