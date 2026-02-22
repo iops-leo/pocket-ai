@@ -13,11 +13,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Fix git commit author for Vercel
+        run: |
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git config user.name "${{ github.actor }}"
+          git commit --amend --reset-author --no-edit
 
       - name: Install Vercel CLI
         run: npm install -g vercel
@@ -39,5 +47,3 @@ jobs:
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          VERCEL_GIT_COMMIT_AUTHOR_LOGIN: ${{ github.actor }}
-          VERCEL_GIT_COMMIT_AUTHOR_NAME: ${{ github.actor }}
