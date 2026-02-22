@@ -27,8 +27,15 @@ export async function authRoutes(fastify: FastifyInstance) {
                     Accept: 'application/vnd.github.v3+json'
                 }
             });
-            const githubEmails: any[] = await emailsResponse.json();
-            const primaryEmail = githubEmails.find(e => e.primary)?.email || githubEmails[0]?.email;
+            const githubEmails: any = await emailsResponse.json();
+
+            // GitHub user object에 email이 있으면 그것 사용 (public email)
+            let primaryEmail = githubUser.email;
+
+            // 없으면 emails API 응답에서 찾기 (배열인지 먼저 확인)
+            if (!primaryEmail && Array.isArray(githubEmails)) {
+                primaryEmail = githubEmails.find(e => e.primary)?.email || githubEmails[0]?.email;
+            }
 
             if (!primaryEmail) {
                 return reply.code(400).send({ error: 'GitHub account must have an email' });
