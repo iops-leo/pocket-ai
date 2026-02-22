@@ -38,8 +38,17 @@ fastify.register(oauthPlugin, {
         auth: (oauthPlugin as any).GITHUB_CONFIGURATION
     },
     startRedirectPath: '/auth/github',
-    callbackUri: process.env.GITHUB_CALLBACK_URL || 'http://localhost:3001/auth/github/callback'
-});
+    callbackUri: process.env.GITHUB_CALLBACK_URL || 'http://localhost:3001/auth/github/callback',
+    // CLI 로그인 지원: cli_port 쿼리 파라미터를 state에 인코딩
+    generateStateFunction: (request: any) => {
+        const cliPort = request.query?.cli_port;
+        const random = Math.random().toString(36).slice(2, 10);
+        return cliPort ? `${random}_cli_${cliPort}` : random;
+    },
+    checkStateFunction: (_request: any, callback: any) => {
+        callback();
+    },
+} as any);
 
 // Setup Socket.IO
 const io = new Server(fastify.server, {

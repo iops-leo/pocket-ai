@@ -8,7 +8,7 @@ interface PocketAIConfig {
 const config = new Conf<PocketAIConfig>({
   projectName: 'pocket-ai',
   defaults: {
-    serverUrl: 'http://localhost:3001',
+    serverUrl: 'https://pocket-ai-production.up.railway.app',
   },
 });
 

@@ -70,9 +70,17 @@ export async function authRoutes(fastify: FastifyInstance) {
 
             const appToken = fastify.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' });
 
-            // Redirect back to the frontend with the token
-            const frontendUrl = process.env.PWA_URL || 'http://localhost:3002';
-            reply.redirect(`${frontendUrl}/login?token=${appToken}`);
+            // CLI 로그인: state에 포트가 인코딩된 경우 로컬 서버로 리다이렉트
+            const rawState = (request.query as any)?.state as string || '';
+            const cliMatch = rawState.match(/_cli_(\d+)$/);
+            const cliPort = cliMatch ? parseInt(cliMatch[1]) : null;
+
+            if (cliPort && cliPort >= 1024 && cliPort <= 65535) {
+                reply.redirect(`http://localhost:${cliPort}/callback?token=${appToken}`);
+            } else {
+                const frontendUrl = process.env.PWA_URL || 'http://localhost:3002';
+                reply.redirect(`${frontendUrl}/login?token=${appToken}`);
+            }
 
         } catch (err) {
             fastify.log.error(err);
