@@ -110,12 +110,8 @@ export class ClaudeOutputParser {
         }
         // ── Streaming flush ──────────────────────────────────────────────────────
         // Claude Code is a full-screen TUI: it renders with cursor addressing, not \n.
-        // We flush the lineBuffer when:
-        //   • "show cursor" ESC sequence appears (end of a TUI render frame)
-        //   • lineBuffer has grown large (safety threshold)
-        const renderComplete = rawChunk.includes('\x1b[?25h'); // show cursor
-        const bufferLarge = this.lineBuffer.length > 300;
-        if ((renderComplete || bufferLarge) && this.lineBuffer && !this.currentToolId) {
+        // We peek at lineBuffer on every chunk to capture streaming content in real-time.
+        if (this.lineBuffer && !this.currentToolId) {
             const streamEvents = this.peekStreamBuffer();
             events.push(...streamEvents);
         }

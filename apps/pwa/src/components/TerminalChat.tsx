@@ -168,8 +168,20 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
         if (e) e.preventDefault();
         if (!inputValue.trim() || !socketRef.current || !sharedSecretRef.current || isDisconnected) return;
 
+        const text = inputValue;
+        setInputValue('');
+
+        // Show sent message immediately in chat
+        setMessages(prev => {
+            const last = prev[prev.length - 1];
+            if (last?.kind === 'text') {
+                return [...prev.slice(0, -1), { ...last, content: last.content + text + '\n' }];
+            }
+            return [...prev, { kind: 'text', id: crypto.randomUUID(), content: text + '\n' }];
+        });
+
         try {
-            const msgStr = JSON.stringify({ t: 'text', text: inputValue + '\n' });
+            const msgStr = JSON.stringify({ t: 'text', text: text + '\n' });
             const encryptedBody = await encrypt(msgStr, sharedSecretRef.current);
 
             socketRef.current.emit('update', {
@@ -178,8 +190,6 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                 sender: 'pwa',
                 body: encryptedBody
             });
-
-            setInputValue('');
         } catch (err) {
             console.error('Failed to send message', err);
         }
