@@ -22,6 +22,8 @@ export declare class ClaudeSessionWatcher {
     private seenUuids;
     private destroyed;
     private pollTimeout;
+    /** Returns the Claude Code session UUID (extracted from JSONL filename), or null if not found yet */
+    get sessionId(): string | null;
     constructor(cwd: string, onEvent: (events: SessionPayload[]) => void);
     start(): void;
     private schedulePoll;

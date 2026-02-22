@@ -27,6 +27,14 @@ export class ClaudeSessionWatcher {
     private destroyed = false;
     private pollTimeout: ReturnType<typeof setTimeout> | null = null;
 
+    /** Returns the Claude Code session UUID (extracted from JSONL filename), or null if not found yet */
+    get sessionId(): string | null {
+        if (!this.sessionFile) return null;
+        // Filename is {session-uuid}.jsonl
+        const basename = path.basename(this.sessionFile, '.jsonl');
+        return basename || null;
+    }
+
     constructor(cwd: string, onEvent: (events: SessionPayload[]) => void) {
         this.onEvent = onEvent;
         this.startTime = Date.now();

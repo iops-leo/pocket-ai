@@ -24,6 +24,14 @@ export class ClaudeSessionWatcher {
     seenUuids = new Set();
     destroyed = false;
     pollTimeout = null;
+    /** Returns the Claude Code session UUID (extracted from JSONL filename), or null if not found yet */
+    get sessionId() {
+        if (!this.sessionFile)
+            return null;
+        // Filename is {session-uuid}.jsonl
+        const basename = path.basename(this.sessionFile, '.jsonl');
+        return basename || null;
+    }
     constructor(cwd, onEvent) {
         this.onEvent = onEvent;
         this.startTime = Date.now();

@@ -92,7 +92,7 @@ function LoginContent() {
                         </li>
                         <li className="flex gap-3 items-start">
                             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center font-medium mt-0.5">3</span>
-                            <span className="leading-relaxed"><code className="bg-gray-800 text-gray-300 px-1.5 py-0.5 rounded font-mono text-xs">pocket-ai start</code> 로 데몬을 켜면 즉시 이곳에 내 PC가 나타납니다.</span>
+                            <span className="leading-relaxed"><code className="bg-gray-800 text-gray-300 px-1.5 py-0.5 rounded font-mono text-xs">pocket-ai</code> 로 데몬을 켜면 즉시 이곳에 내 PC가 나타납니다.</span>
                         </li>
                     </ol>
                 </div>

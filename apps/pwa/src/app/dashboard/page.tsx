@@ -235,7 +235,7 @@ export default function DashboardPage() {
                         <TerminalIcon size={40} className="text-gray-700 mb-4" />
                         <p className="text-gray-400 text-lg mb-2">활성화된 PC 세션이 없습니다</p>
                         <p className="text-sm text-gray-500">
-                            PC 터미널에서 <code className="bg-gray-800 text-gray-300 px-1.5 py-0.5 rounded font-mono text-xs">pocket-ai start</code>를 실행하여 연결하세요.
+                            PC 터미널에서 <code className="bg-gray-800 text-gray-300 px-1.5 py-0.5 rounded font-mono text-xs">pocket-ai</code>를 실행하여 연결하세요.
                         </p>
                     </div>
                 )}

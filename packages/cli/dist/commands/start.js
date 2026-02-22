@@ -126,7 +126,19 @@ export async function startSession(command = 'claude', options = {}) {
                         const decrypted = await decrypt(data.body, sharedSecret);
                         const msg = JSON.parse(decrypted);
                         if (msg.t === 'text') {
-                            shell.write(msg.text);
+                            const text = msg.text;
+                            // Claude Code's Ink TUI treats "text\r" as one chunk → \r becomes newline
+                            // Physical keyboard sends Enter (\r) as a SEPARATE keypress event → submit
+                            // Fix: separate text from \r and send with delay to simulate real typing
+                            if (text.endsWith('\r') || text.endsWith('\n')) {
+                                const content = text.slice(0, -1);
+                                if (content)
+                                    shell.write(content);
+                                setTimeout(() => shell.write('\r'), 100);
+                            }
+                            else {
+                                shell.write(text);
+                            }
                         }
                     }
                     catch (err) {
