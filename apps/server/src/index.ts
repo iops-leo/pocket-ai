@@ -35,7 +35,7 @@ fastify.register(oauthPlugin, {
             id: process.env.GITHUB_CLIENT_ID,
             secret: process.env.GITHUB_CLIENT_SECRET
         },
-        auth: oauthPlugin.GITHUB_CONFIGURATION
+        auth: (oauthPlugin as any).GITHUB_CONFIGURATION
     },
     startRedirectPath: '/auth/github',
     callbackUri: process.env.GITHUB_CALLBACK_URL || 'http://localhost:3001/auth/github/callback'

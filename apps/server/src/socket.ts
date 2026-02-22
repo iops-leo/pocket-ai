@@ -1,6 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import { FastifyInstance } from 'fastify';
-import { activeSessions } from './routes/sessions';
+import { activeSessions } from './routes/sessions.js';
 
 export function setupSocketIO(io: Server, fastify: FastifyInstance) {
 
