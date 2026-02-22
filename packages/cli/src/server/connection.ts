@@ -3,6 +3,9 @@ import { getServerUrl, getToken } from '../config.js';
 
 export interface ConnectOptions {
   sessionId: string;
+  publicKey: string;
+  metadata: Record<string, string>;
+  onSessionIdUpdate: (newSessionId: string) => void;
   onAuthSuccess: (data: { sessionId: string }) => void;
   onAuthError: (data: { error: string }) => void;
   onKeyExchange: (data: { sessionId: string; publicKey: string; sender: string }) => void;
@@ -18,27 +21,48 @@ export function connectToServer(options: ConnectOptions): Socket {
     throw new Error('Not authenticated. Run `pocket-ai login` first.');
   }
 
+  // 현재 유효한 sessionId (서버 재시작 시 재등록 후 갱신됨)
+  let currentSessionId = options.sessionId;
+
   const socket = io(serverUrl, {
+    transports: ['websocket'], // polling 비활성화 → 로그 스팸 제거
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
+    reconnectionDelayMax: 10000,
   });
 
   socket.on('connect', () => {
-    socket.emit('client-auth', {
-      sessionId: options.sessionId,
-      token,
-    });
+    socket.emit('client-auth', { sessionId: currentSessionId, token });
   });
 
   socket.on('auth-success', options.onAuthSuccess);
-  socket.on('auth-error', options.onAuthError);
+
+  socket.on('auth-error', async (data: { error: string }) => {
+    if (data.error === 'Invalid session or ownership') {
+      // 서버가 재시작되어 세션이 사라진 경우 → 재등록
+      try {
+        const newSessionId = await registerSession(options.publicKey, options.metadata);
+        currentSessionId = newSessionId;
+        options.onSessionIdUpdate(newSessionId);
+        socket.emit('client-auth', { sessionId: currentSessionId, token });
+      } catch (err: any) {
+        console.error('[Pocket AI] 세션 재등록 실패:', err.message);
+        options.onAuthError(data);
+      }
+    } else {
+      options.onAuthError(data);
+    }
+  });
+
   socket.on('key-exchange', options.onKeyExchange);
   socket.on('update', options.onUpdate);
   socket.on('disconnect', options.onDisconnect);
   socket.on('connect_error', (err) => {
-    console.error(`Connection error: ${err.message}`);
+    // 서버 다운 시 조용히 재시도 (에러 로그 스팸 방지)
+    if (process.env.DEBUG) {
+      console.error(`[Pocket AI] 연결 오류: ${err.message}`);
+    }
   });
 
   return socket;

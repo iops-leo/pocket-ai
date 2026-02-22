@@ -97,8 +97,15 @@ export async function startSession(command: string = 'claude', options: { remote
 
   // 6. Connect to relay server
   if (options.remote !== false) {
+    const sessionMetadata = { hostname: os.hostname(), engine: command };
     socket = connectToServer({
       sessionId,
+      publicKey: publicKeyBase64,
+      metadata: sessionMetadata,
+      onSessionIdUpdate: (newSessionId) => {
+        sessionId = newSessionId;
+        console.log(`[Pocket AI] 세션 재등록 완료: ${newSessionId.slice(0, 8)}...`);
+      },
       onAuthSuccess: (data) => {
         console.log(`서버 연결 완료 (세션: ${data.sessionId.slice(0, 8)}...)`);
         console.log('원격 접속 대기 중... (PWA 또는 다른 머신에서 접속 가능)\n');
