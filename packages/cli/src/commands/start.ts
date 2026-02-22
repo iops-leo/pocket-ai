@@ -5,6 +5,7 @@ import { getToken } from '../config.js';
 import { connectToServer, registerSession } from '../server/connection.js';
 import type { Socket } from 'socket.io-client';
 import { SessionWatcher, getSessionKey, getSessionDisplayName, isValidEngine } from '../session-manager.js';
+import { ClaudeOutputParser } from '../utils/output-parser.js';
 
 /**
  * AI CLI 세션 시작 (Happy 스타일 심플 래퍼)
@@ -56,21 +57,25 @@ export async function startSession(command: string = 'claude', options: { remote
   // 5. Local mode: pipe CLI output to terminal
   let socket: Socket | null = null;
   let sharedSecret: CryptoKey | null = null;
+  const parser = new ClaudeOutputParser();
 
   shell.onData((data: string) => {
-    process.stdout.write(data);
+    process.stdout.write(data); // 로컬 터미널은 raw ANSI 그대로
 
     // Also relay to remote clients if connected and key is derived
     if (sharedSecret && socket) {
-      encrypt(JSON.stringify({ t: 'text', text: data }), sharedSecret)
-        .then((encrypted) => {
-          socket!.emit('update', {
-            sessionId,
-            sender: 'cli',
-            body: encrypted,
-          });
-        })
-        .catch(() => { }); // Non-critical: remote relay failure shouldn't break local
+      const events = parser.feed(data);
+      for (const event of events) {
+        encrypt(JSON.stringify(event), sharedSecret)
+          .then((encrypted) => {
+            socket!.emit('update', {
+              sessionId,
+              sender: 'cli',
+              body: encrypted,
+            });
+          })
+          .catch(() => { }); // Non-critical: remote relay failure shouldn't break local
+      }
     }
   });
 
@@ -91,6 +96,16 @@ export async function startSession(command: string = 'claude', options: { remote
   // Handle CLI process exit
   shell.onExit(({ exitCode }: { exitCode: number }) => {
     console.log(`\nAI CLI 프로세스가 종료되었습니다 (code: ${exitCode})`);
+    // flush remaining parser state
+    if (sharedSecret && socket) {
+      for (const event of parser.flush()) {
+        encrypt(JSON.stringify(event), sharedSecret)
+          .then((encrypted) => {
+            socket!.emit('update', { sessionId, sender: 'cli', body: encrypted });
+          })
+          .catch(() => { });
+      }
+    }
     if (socket) socket.disconnect();
     process.exit(exitCode);
   });

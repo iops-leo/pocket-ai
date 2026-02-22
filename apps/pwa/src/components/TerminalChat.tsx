@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, ArrowUp } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt } from '@pocket-ai/wire';
-import 'xterm/css/xterm.css';
+import { MessageList, type ChatMessage } from './MessageList';
 
 interface TerminalChatProps {
     sessionId: string;
@@ -15,15 +15,13 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
     const [isConnecting, setIsConnecting] = useState(true);
     const [isDisconnected, setIsDisconnected] = useState(false);
     const [inputValue, setInputValue] = useState('');
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
 
-    const terminalRef = useRef<HTMLDivElement>(null);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const termInstance = useRef<any>(null);
     const sharedSecretRef = useRef<CryptoKey | null>(null);
     const socketRef = useRef<Socket | null>(null);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const initConnection = useCallback(async (term: any, socket: Socket) => {
+    const initConnection = useCallback(async (socket: Socket) => {
         const token = localStorage.getItem('pocket_ai_token');
         if (!token) return;
 
@@ -49,14 +47,22 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                     setIsDisconnected(false);
                 } catch (e) {
                     console.error('E2E Setup Failed', e);
-                    term.writeln('\r\n\x1b[31m[Pocket AI] E2E Setup Failed.\x1b[0m\r\n');
+                    setMessages(prev => [...prev, {
+                        kind: 'text',
+                        id: crypto.randomUUID(),
+                        content: '[Pocket AI] E2E Setup Failed.\n'
+                    }]);
                 }
             });
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             socket.once('join-error', (err: any) => {
                 console.error('Failed to join session', err);
-                term.writeln(`\r\n\x1b[31m[Pocket AI] Failed to join session: ${err.error}\x1b[0m\r\n`);
+                setMessages(prev => [...prev, {
+                    kind: 'text',
+                    id: crypto.randomUUID(),
+                    content: `[Pocket AI] Failed to join session: ${err.error}\n`
+                }]);
                 setIsConnecting(false);
             });
         } catch (err) {
@@ -65,126 +71,68 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
     }, [sessionId]);
 
     useEffect(() => {
-        if (!terminalRef.current) return;
+        const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const socket = io(SERVER_URL, {
+            reconnectionDelayMax: 5000,
+            reconnectionAttempts: Infinity
+        });
+        socketRef.current = socket;
 
-        let socket: Socket;
+        socket.on('connect', () => {
+            setIsDisconnected(false);
+            setIsConnecting(true);
+            initConnection(socket);
+        });
+
+        socket.on('disconnect', (reason) => {
+            console.warn('Socket disconnected:', reason);
+            setIsDisconnected(true);
+            setIsConnecting(false);
+            sharedSecretRef.current = null;
+        });
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let term: any;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let fitAddon: any;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let webLinksAddon: any;
-
-        const setupTerminal = async () => {
-            const { Terminal } = await import('xterm');
-            const { FitAddon } = await import('xterm-addon-fit');
-
-            try {
-                const WebLinksAddonModule = await import('xterm-addon-web-links');
-                webLinksAddon = new WebLinksAddonModule.WebLinksAddon();
-            } catch {
-                // Ignore if not installed
-            }
-
-            const isMobile = window.innerWidth < 768;
-
-            term = new Terminal({
-                cursorBlink: true,
-                theme: {
-                    background: '#030712', // tailwind gray-950
-                    foreground: '#f3f4f6', // tailwind gray-100
-                    selectionBackground: '#1e40af', // blue-800
-                },
-                fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-                fontSize: isMobile ? 12 : 14,
-                lineHeight: 1.2,
-                scrollback: 5000,
-                macOptionIsMeta: true,
-                allowTransparency: true,
-            });
-
-            fitAddon = new FitAddon();
-            term.loadAddon(fitAddon);
-            if (webLinksAddon) {
-                term.loadAddon(webLinksAddon);
-            }
-
-            if (terminalRef.current) {
-                term.open(terminalRef.current);
-                fitAddon.fit();
-            }
-
-            termInstance.current = term;
-
-            const handleResize = () => {
-                if (termInstance.current && fitAddon) {
-                    fitAddon.fit();
-                }
-            };
-            window.addEventListener('resize', handleResize);
-
-            // Connect Socket
-            const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-            socket = io(SERVER_URL, {
-                reconnectionDelayMax: 5000,
-                reconnectionAttempts: Infinity
-            });
-            socketRef.current = socket;
-
-            socket.on('connect', () => {
-                setIsDisconnected(false);
-                setIsConnecting(true);
-                initConnection(term, socket);
-            });
-
-            socket.on('disconnect', (reason) => {
-                console.warn('Socket disconnected:', reason);
-                setIsDisconnected(true);
-                setIsConnecting(false);
-                sharedSecretRef.current = null; // Invalidate current session key
-            });
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            socket.on('update', async (payload: any) => {
-                if (payload.sender === 'cli' && payload.body && sharedSecretRef.current) {
-                    try {
-                        const decryptedJson = await decrypt(payload.body, sharedSecretRef.current);
-                        const msg = JSON.parse(decryptedJson);
-
-                        if (msg.t === 'text') {
-                            term.write(msg.text);
-                        }
-                    } catch (e) {
-                        console.error('Failed to decrypt CLI message', e);
-                    }
-                }
-            });
-
-            // Handle user typing natively inside the terminal if they manage to focus it
-            term.onData(async (data: string) => {
-                if (!sharedSecretRef.current || isDisconnected) return;
+        socket.on('update', async (payload: any) => {
+            if (payload.sender === 'cli' && payload.body && sharedSecretRef.current) {
                 try {
-                    const msgStr = JSON.stringify({ t: 'text', text: data });
-                    const encryptedBody = await encrypt(msgStr, sharedSecretRef.current);
+                    const decryptedJson = await decrypt(payload.body, sharedSecretRef.current);
+                    const msg = JSON.parse(decryptedJson);
 
-                    socket.emit('update', {
-                        t: 'encrypted',
-                        sessionId,
-                        sender: 'pwa',
-                        body: encryptedBody
-                    });
+                    if (msg.t === 'text') {
+                        setMessages(prev => {
+                            const last = prev[prev.length - 1];
+                            if (last?.kind === 'text') {
+                                return [...prev.slice(0, -1), { ...last, content: last.content + msg.text }];
+                            }
+                            return [...prev, { kind: 'text', id: crypto.randomUUID(), content: msg.text }];
+                        });
+                    }
+
+                    if (msg.t === 'tool-call') {
+                        setMessages(prev => [...prev, {
+                            kind: 'tool',
+                            id: msg.id,
+                            name: msg.name,
+                            args: msg.arguments,
+                            status: 'running' as const,
+                        }]);
+                    }
+
+                    if (msg.t === 'tool-result') {
+                        setMessages(prev => prev.map(m =>
+                            m.kind === 'tool' && m.id === msg.id
+                                ? { ...m, output: msg.result, status: (msg.error ? 'error' : 'done') as 'error' | 'done', error: msg.error }
+                                : m
+                        ));
+                    }
                 } catch (e) {
-                    console.error('Failed to encrypt outgoing message', e);
+                    console.error('Failed to decrypt CLI message', e);
                 }
-            });
-        };
-
-        setupTerminal();
+            }
+        });
 
         return () => {
-            if (socket) socket.disconnect();
-            if (term) term.dispose();
-            window.removeEventListener('resize', () => { });
+            socket.disconnect();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionId, initConnection]);
@@ -201,8 +149,6 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                     sender: 'pwa',
                     body: encryptedBody
                 });
-
-                termInstance.current?.focus();
             }
         } catch (e) {
             console.error('Failed to read clipboard', e);
@@ -225,11 +171,6 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
             });
 
             setInputValue('');
-
-            // Allow focus to remain on input for consecutive typing
-            setTimeout(() => {
-                termInstance.current?.scrollToBottom();
-            }, 50);
         } catch (err) {
             console.error('Failed to send message', err);
         }
@@ -267,7 +208,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                 </div>
             </header>
 
-            <main className="flex-1 relative w-full h-full bg-gray-950 flex flex-col">
+            <main className="flex-1 relative w-full min-h-0 bg-gray-950 flex flex-col">
                 {isConnecting && !isDisconnected && (
                     <div className="absolute inset-0 z-10 bg-gray-950/80 flex flex-col items-center justify-center text-gray-300 gap-4 backdrop-blur-sm">
                         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
@@ -291,20 +232,13 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                     </div>
                 )}
 
-                <div className="flex-1 w-full relative">
-                    <div
-                        ref={terminalRef}
-                        className="absolute inset-x-0 inset-y-0 terminal-container custom-scrollbar"
-                        style={{ padding: '8px' }}
-                    />
-                </div>
+                <MessageList messages={messages} />
 
-                {/* Mobile Input Overlay to hide CLI status bar and provide comfortable standard chat text entry */}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-gray-950 via-gray-950 to-transparent pointer-events-none flex flex-col justify-end z-20">
-
-                    {/* Quick Action Chips (Slash Commands) */}
+                {/* Input bar */}
+                <div className="flex-none bg-gray-950 w-full border-t border-gray-800/60">
+                    {/* Quick Action Chips */}
                     {!isDisconnected && !isConnecting && (
-                        <div className="w-full px-4 pb-2 pointer-events-auto overflow-x-auto no-scrollbar flex gap-2 snap-x">
+                        <div className="w-full px-4 pt-2 overflow-x-auto no-scrollbar flex gap-2 snap-x">
                             {[
                                 { label: '🔄 Claude', cmd: '/switch claude' },
                                 { label: '💎 Gemini', cmd: '/switch gemini' },
@@ -314,11 +248,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                                 <button
                                     key={idx}
                                     type="button"
-                                    onClick={() => {
-                                        setInputValue(action.cmd);
-                                        // Optional: Auto-focus the input or submit immediately
-                                        // To submit immediately, extract the send logic to a reusable function.
-                                    }}
+                                    onClick={() => setInputValue(action.cmd)}
                                     className="snap-start whitespace-nowrap px-3 py-1.5 rounded-full bg-gray-800/80 hover:bg-gray-700 text-gray-300 text-xs font-medium border border-gray-700/50 backdrop-blur-md transition-colors"
                                 >
                                     {action.label}
@@ -327,7 +257,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                         </div>
                     )}
 
-                    <div className="bg-gray-950 w-full px-4 pb-4 sm:pb-5 pointer-events-auto flex items-center pt-1">
+                    <div className="w-full px-4 pb-4 sm:pb-5 pt-2 flex items-center">
                         <form
                             onSubmit={handleSend}
                             className="bg-gray-900 border border-gray-700/60 rounded-full flex items-center pr-2 pl-4 py-1.5 shadow-xl w-full transition-all focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/50"
