@@ -28,4 +28,4 @@ COPY --from=builder /app/scripts ./scripts
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "node dist/scripts/migrate.js up && node dist/index.js"]
+CMD ["node", "dist/index.js"]
