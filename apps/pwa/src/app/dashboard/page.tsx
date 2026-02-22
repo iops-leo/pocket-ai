@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Terminal as TerminalIcon, Cpu, LogOut, RefreshCw, Loader2 } from 'lucide-react';
+import { Terminal as TerminalIcon, Cpu, RefreshCw, Loader2, Settings, Search, Wifi, WifiOff, MoreVertical } from 'lucide-react';
 import { TerminalChat } from '@/components/TerminalChat';
+import { SessionDetailsModal } from '@/components/SessionDetailsModal';
+import { io, Socket } from 'socket.io-client';
+import Link from 'next/link';
 
 interface Session {
     sessionId: string;
@@ -13,16 +16,24 @@ interface Session {
         engine?: string;
     };
     status: string;
+    lastPing?: number;
 }
 
 export default function DashboardPage() {
     const router = useRouter();
     const [sessions, setSessions] = useState<Session[]>([]);
     const [activeSession, setActiveSession] = useState<string | null>(null);
+    const [selectedSessionForDetails, setSelectedSessionForDetails] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchSessions = async () => {
+    // Search & Filter
+    const [searchQuery, setSearchQuery] = useState('');
+    const [engineFilter, setEngineFilter] = useState<string>('all');
+
+    const socketRef = useRef<Socket | null>(null);
+
+    const fetchSessions = async (showLoader = true) => {
         const token = localStorage.getItem('pocket_ai_token');
         if (!token) {
             router.replace('/login');
@@ -31,6 +42,8 @@ export default function DashboardPage() {
 
         try {
             setError(null);
+            if (showLoader) setIsLoading(true);
+
             const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
             const res = await fetch(`${serverUrl}/api/sessions`, {
                 headers: {
@@ -39,7 +52,6 @@ export default function DashboardPage() {
             });
 
             if (res.status === 401) {
-                // Token expired or invalid
                 localStorage.removeItem('pocket_ai_token');
                 router.replace('/login');
                 return;
@@ -54,22 +66,60 @@ export default function DashboardPage() {
         } catch {
             setError('서버에 연결할 수 없습니다');
         } finally {
-            setIsLoading(false);
+            if (showLoader) setIsLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchSessions();
-        // Poll every 10 seconds for session updates
-        const interval = setInterval(fetchSessions, 10000);
-        return () => clearInterval(interval);
+        fetchSessions(true);
+
+        const token = localStorage.getItem('pocket_ai_token');
+        if (!token) return;
+
+        const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+        const socket = io(serverUrl, {
+            path: '/v1/updates',
+            auth: { token, role: 'pwa' },
+            transports: ['websocket']
+        });
+
+        socketRef.current = socket;
+
+        socket.on('connect', () => {
+            console.log('Real-time updates connected');
+        });
+
+        socket.on('update-session', (updatedSession: Session) => {
+            setSessions(prev => {
+                const existing = prev.findIndex(s => s.sessionId === updatedSession.sessionId);
+                if (existing >= 0) {
+                    const newSessions = [...prev];
+                    newSessions[existing] = updatedSession;
+                    return newSessions;
+                }
+                return [...prev, updatedSession];
+            });
+        });
+
+        socket.on('session-offline', (sessionId: string) => {
+            setSessions(prev => prev.map(s =>
+                s.sessionId === sessionId ? { ...s, status: 'offline' } : s
+            ));
+        });
+
+        return () => {
+            socket.disconnect();
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const handleLogout = () => {
-        localStorage.removeItem('pocket_ai_token');
-        router.replace('/login');
-    };
+    const filteredSessions = sessions.filter(session => {
+        const matchesSearch = session.metadata?.hostname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            session.sessionId.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesEngine = engineFilter === 'all' || session.metadata?.engine?.toLowerCase() === engineFilter.toLowerCase();
+        return matchesSearch && matchesEngine;
+    });
 
     if (activeSession) {
         return <TerminalChat sessionId={activeSession} onBack={() => setActiveSession(null)} />;
@@ -77,32 +127,57 @@ export default function DashboardPage() {
 
     return (
         <div className="min-h-screen bg-gray-950 font-sans text-gray-100 p-6 md:p-12">
-            <header className="flex justify-between items-center mb-12">
+            <header className="max-w-4xl mx-auto flex justify-between items-center mb-8">
                 <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
                     Pocket AI
                 </h1>
                 <div className="flex items-center gap-2">
                     <button
-                        onClick={fetchSessions}
+                        onClick={() => fetchSessions(true)}
                         className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-gray-800 transition-colors"
                         title="새로고침"
                     >
                         <RefreshCw size={18} />
                     </button>
-                    <button
-                        onClick={handleLogout}
+                    <Link
+                        href="/settings"
                         className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-gray-800 transition-colors"
-                        title="로그아웃"
+                        title="설정"
                     >
-                        <LogOut size={20} />
-                    </button>
+                        <Settings size={20} />
+                    </Link>
                 </div>
             </header>
 
             <main className="max-w-4xl mx-auto">
-                <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                    <TerminalIcon className="text-blue-400" /> 활성 세션
-                </h2>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                        <TerminalIcon className="text-blue-400" /> 세션 목록
+                    </h2>
+
+                    {/* Filter & Search */}
+                    <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                            <input
+                                type="text"
+                                placeholder="호스트명 검색..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full sm:w-64 pl-10 pr-4 py-2 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                            />
+                        </div>
+                        <select
+                            value={engineFilter}
+                            onChange={(e) => setEngineFilter(e.target.value)}
+                            className="w-full sm:w-auto px-4 py-2 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-300 focus:outline-none focus:border-blue-500 transition-all"
+                        >
+                            <option value="all">모든 엔진</option>
+                            <option value="claude">Claude</option>
+                            <option value="gemini">Gemini</option>
+                        </select>
+                    </div>
+                </div>
 
                 {isLoading ? (
                     <div className="flex items-center justify-center p-12">
@@ -112,51 +187,83 @@ export default function DashboardPage() {
                     <div className="text-center p-12 border border-dashed border-red-800/50 rounded-2xl bg-red-900/10">
                         <p className="text-red-400">{error}</p>
                         <button
-                            onClick={fetchSessions}
+                            onClick={() => fetchSessions(true)}
                             className="mt-4 text-sm text-gray-400 hover:text-white underline"
                         >
                             다시 시도
                         </button>
                     </div>
-                ) : sessions.length > 0 ? (
+                ) : filteredSessions.length > 0 ? (
                     <div className="grid gap-4 md:grid-cols-2">
-                        {sessions.map((session) => (
-                            <div
-                                key={session.sessionId}
-                                onClick={() => setActiveSession(session.sessionId)}
-                                className="p-6 rounded-2xl border bg-gray-900 border-gray-700 hover:border-blue-500 cursor-pointer shadow-lg hover:shadow-blue-900/20 transition-all duration-200 group relative overflow-hidden"
-                            >
-                                <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 group-hover:bg-emerald-400 transition-colors" />
+                        {filteredSessions.map((session) => {
+                            const isOnline = session.status === 'online';
+                            return (
+                                <div
+                                    key={session.sessionId}
+                                    className="p-5 rounded-2xl border bg-gray-900 border-gray-800 hover:border-blue-600/50 cursor-pointer shadow-lg hover:shadow-blue-900/10 transition-all duration-200 group relative overflow-hidden flex flex-col justify-between"
+                                >
+                                    <div className={`absolute top-0 left-0 w-1 h-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-gray-600'}`} />
 
-                                <div className="flex justify-between items-start mb-4">
-                                    <h3 className="font-medium text-lg text-white font-mono flex items-center gap-2">
-                                        {session.metadata?.hostname || 'Unknown'}
-                                    </h3>
-                                    <span className="px-2 py-1 text-xs rounded-full font-medium bg-emerald-500/10 text-emerald-400">
-                                        online
-                                    </span>
-                                </div>
+                                    <div className="flex justify-between items-start mb-4 relative z-10" onClick={() => isOnline && setActiveSession(session.sessionId)}>
+                                        <div>
+                                            <h3 className="font-medium text-lg text-white font-mono flex items-center gap-2">
+                                                {session.metadata?.hostname || 'Unknown Host'}
+                                            </h3>
+                                            <div className="flex items-center gap-1.5 mt-1 text-sm text-gray-500">
+                                                <Cpu size={14} /> {session.metadata?.engine || 'claude'}
+                                                <span className="mx-1">•</span>
+                                                <span className="font-mono text-xs">{session.sessionId.slice(0, 8)}</span>
+                                            </div>
+                                        </div>
 
-                                <div className="text-sm text-gray-400 flex items-center gap-4">
-                                    <span className="flex items-center gap-1">
-                                        <Cpu size={14} /> {session.metadata?.engine || 'claude'}
-                                    </span>
-                                    <span className="flex items-center gap-1 text-xs text-gray-500 font-mono">
-                                        {session.sessionId.slice(0, 8)}...
-                                    </span>
+                                        <div className="flex flex-col items-end gap-2">
+                                            <span className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full font-medium border ${isOnline
+                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                                : 'bg-gray-800 text-gray-400 border-gray-700'
+                                                }`}>
+                                                {isOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
+                                                {isOnline ? 'Online' : 'Offline'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 mt-auto border-t border-gray-800/50 flex justify-between items-center text-xs text-gray-500">
+                                        <span>마지막 활동: {isOnline ? '방금 전' : '알 수 없음'}</span>
+                                        <button
+                                            className="p-1.5 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedSessionForDetails(session);
+                                            }}
+                                        >
+                                            <MoreVertical size={16} />
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 ) : (
-                    <div className="text-center p-12 border border-dashed border-gray-800 rounded-2xl bg-gray-900/30">
-                        <p className="text-gray-400">활성화된 PC 세션이 없습니다.</p>
-                        <p className="text-sm text-gray-500 mt-2">
-                            PC에서 <code className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">pocket-ai start</code>를 실행하세요.
+                    <div className="text-center p-16 border border-dashed border-gray-800 rounded-2xl bg-gray-900/30 flex flex-col items-center">
+                        <TerminalIcon size={40} className="text-gray-700 mb-4" />
+                        <p className="text-gray-400 text-lg mb-2">활성화된 PC 세션이 없습니다</p>
+                        <p className="text-sm text-gray-500">
+                            PC 터미널에서 <code className="bg-gray-800 text-gray-300 px-1.5 py-0.5 rounded font-mono text-xs">pocket-ai start</code>를 실행하여 연결하세요.
                         </p>
                     </div>
                 )}
             </main>
+
+            {selectedSessionForDetails && (
+                <SessionDetailsModal
+                    session={selectedSessionForDetails}
+                    onClose={() => setSelectedSessionForDetails(null)}
+                    onConnect={() => {
+                        setActiveSession(selectedSessionForDetails.sessionId);
+                        setSelectedSessionForDetails(null);
+                    }}
+                />
+            )}
         </div>
     );
 }
