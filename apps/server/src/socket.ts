@@ -68,7 +68,7 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
 
                 if (session && session.userId === decoded.sub && session.status === 'online') {
                     socket.join(`session_${sessionId}`);
-                    socket.emit('join-success', { sessionId, publicKey: session.publicKey });
+                    socket.emit('join-success', { sessionId, publicKey: session.publicKey, metadata: session.metadata });
                     fastify.log.info(`PWA joined session ${sessionId}`);
                 } else {
                     socket.emit('join-error', { error: 'Session offline or unauthorized' });

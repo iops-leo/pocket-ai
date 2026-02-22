@@ -128,7 +128,7 @@ export class ClaudeSessionWatcher {
         if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
             for (const block of entry.message.content) {
                 if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
-                    events.push({ t: 'text', text: block.text + '\n' });
+                    events.push({ t: 'text', text: block.text });
                 } else if (block.type === 'tool_use') {
                     const args = block.input != null ? JSON.stringify(block.input) : '';
                     events.push({ t: 'tool-call', id: block.id, name: block.name, arguments: args });

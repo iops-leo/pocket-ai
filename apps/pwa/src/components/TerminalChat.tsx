@@ -16,6 +16,8 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
     const [isDisconnected, setIsDisconnected] = useState(false);
     const [inputValue, setInputValue] = useState('');
     const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [sessionMeta, setSessionMeta] = useState<{ engine?: string; hostname?: string; cwd?: string }>({});
+    const [isAiThinking, setIsAiThinking] = useState(false);
 
     const sharedSecretRef = useRef<CryptoKey | null>(null);
     const socketRef = useRef<Socket | null>(null);
@@ -42,6 +44,10 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                         publicKey: pubBase64,
                         sender: 'pwa'
                     });
+
+                    if (data.metadata) {
+                        setSessionMeta(data.metadata);
+                    }
 
                     setIsConnecting(false);
                     setIsDisconnected(false);
@@ -101,16 +107,18 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                     const msg = JSON.parse(decryptedJson);
 
                     if (msg.t === 'text') {
-                        // AI responses always start a new bubble (from JSONL watcher)
+                        setIsAiThinking(false);
                         setMessages(prev => [...prev, {
                             kind: 'text',
                             id: crypto.randomUUID(),
                             role: 'assistant' as const,
                             content: msg.text,
+                            timestamp: Date.now(),
                         }]);
                     }
 
                     if (msg.t === 'tool-call') {
+                        setIsAiThinking(false);
                         setMessages(prev => [...prev, {
                             kind: 'tool',
                             id: msg.id,
@@ -174,11 +182,13 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
         setInputValue('');
 
         // Show sent message immediately in chat (always new bubble)
+        setIsAiThinking(true);
         setMessages(prev => [...prev, {
             kind: 'text',
             id: crypto.randomUUID(),
             role: 'user' as const,
             content: text,
+            timestamp: Date.now(),
         }]);
 
         try {
@@ -199,18 +209,27 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
     return (
         <div className="flex flex-col h-[100dvh] bg-gray-950 font-sans text-gray-100 overflow-hidden">
             <header className="flex-none flex items-center justify-between p-3 border-b border-gray-800 bg-gray-900/80 backdrop-blur-md z-20">
-                <div className="flex items-center gap-3">
-                    <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-white">
+                <div className="flex items-center gap-3 min-w-0">
+                    <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-white flex-shrink-0">
                         <ArrowLeft size={20} />
                     </button>
-                    <div>
+                    <div className="min-w-0">
                         <h2 className="font-semibold text-sm md:text-base flex items-center gap-2 text-white">
-                            <span className={`w-2 h-2 rounded-full ${isDisconnected ? 'bg-red-500' : isConnecting ? 'bg-yellow-500 animate-pulse' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'}`}></span>
-                            <span className="font-mono">{sessionId.split('-')[0]}</span>
-                            <span className="hidden sm:inline text-gray-400 font-normal">
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDisconnected ? 'bg-red-500' : isConnecting ? 'bg-yellow-500 animate-pulse' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'}`}></span>
+                            <span className="truncate">
+                                {sessionMeta.engine
+                                    ? sessionMeta.engine.charAt(0).toUpperCase() + sessionMeta.engine.slice(1)
+                                    : sessionId.split('-')[0]}
+                            </span>
+                            <span className="hidden sm:inline text-gray-400 font-normal text-xs">
                                 ({isDisconnected ? '연결 끊김' : isConnecting ? '연결 중' : '보안 연결됨'})
                             </span>
                         </h2>
+                        {sessionMeta.cwd && (
+                            <p className="text-[11px] text-gray-500 truncate">
+                                {sessionMeta.cwd.split('/').slice(-2).join('/')}
+                            </p>
+                        )}
                     </div>
                 </div>
 
@@ -252,7 +271,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                     </div>
                 )}
 
-                <MessageList messages={messages} />
+                <MessageList messages={messages} isAiThinking={isAiThinking} />
 
                 {/* Input bar */}
                 <div className="flex-none bg-gray-950 w-full border-t border-gray-800/60">

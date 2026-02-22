@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Terminal, FileText, Search, Globe, Wrench, ChevronDown, ChevronRight, Loader2, Check, X, type LucideIcon } from 'lucide-react';
+import { Terminal, FileText, Search, Globe, Wrench, ChevronDown, ChevronRight, Loader2, Check, X, Copy, type LucideIcon } from 'lucide-react';
 
 type ToolStatus = 'running' | 'done' | 'error';
 
@@ -21,6 +21,7 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
 
 export function ToolCard({ name, args, output, status, error }: ToolCardProps) {
     const [expanded, setExpanded] = useState(false);
+    const [copied, setCopied] = useState(false);
     const Icon = TOOL_ICONS[name] ?? Wrench;
     const hasOutput = (output && output.trim()) || error;
 
@@ -45,8 +46,25 @@ export function ToolCard({ name, args, output, status, error }: ToolCardProps) {
             </button>
 
             {expanded && hasOutput && (
-                <div className="border-t border-gray-700/60 px-3 py-2 bg-gray-950/50 max-h-64 overflow-y-auto">
-                    <pre className="text-xs text-gray-400 font-mono whitespace-pre-wrap break-all">
+                <div className="border-t border-gray-700/60 bg-gray-950/50 max-h-64 overflow-y-auto">
+                    <div className="flex justify-end px-3 pt-1.5">
+                        <button
+                            onClick={async () => {
+                                const text = error || output || '';
+                                try {
+                                    await navigator.clipboard.writeText(text);
+                                    setCopied(true);
+                                    setTimeout(() => setCopied(false), 1500);
+                                } catch { /* clipboard not available */ }
+                            }}
+                            className="inline-flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+                            title="출력 복사"
+                        >
+                            {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                            {copied ? '복사됨' : '복사'}
+                        </button>
+                    </div>
+                    <pre className="text-xs text-gray-400 font-mono whitespace-pre-wrap break-all px-3 pb-2">
                         {error ? <span className="text-red-400">{error}</span> : output}
                     </pre>
                 </div>

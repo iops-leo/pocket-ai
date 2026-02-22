@@ -24,6 +24,7 @@ export async function startSession(command = 'claude', options = {}) {
         sessionId = await registerSession(publicKeyBase64, {
             hostname: os.hostname(),
             engine: command,
+            cwd: process.cwd(),
         });
         console.log(`세션 등록 완료: ${sessionId.slice(0, 8)}...`);
     }
@@ -94,7 +95,7 @@ export async function startSession(command = 'claude', options = {}) {
     });
     // 6. Connect to relay server
     if (options.remote !== false) {
-        const sessionMetadata = { hostname: os.hostname(), engine: command };
+        const sessionMetadata = { hostname: os.hostname(), engine: command, cwd: process.cwd() };
         socket = connectToServer({
             sessionId,
             publicKey: publicKeyBase64,
