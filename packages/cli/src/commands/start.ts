@@ -5,7 +5,7 @@ import { getToken } from '../config.js';
 import { connectToServer, registerSession } from '../server/connection.js';
 import type { Socket } from 'socket.io-client';
 import { SessionWatcher, getSessionKey, getSessionDisplayName, isValidEngine } from '../session-manager.js';
-import { ClaudeOutputParser } from '../utils/output-parser.js';
+import { ClaudeSessionWatcher } from '../utils/session-watcher.js';
 
 /**
  * AI CLI 세션 시작 (Happy 스타일 심플 래퍼)
@@ -57,26 +57,11 @@ export async function startSession(command: string = 'claude', options: { remote
   // 5. Local mode: pipe CLI output to terminal
   let socket: Socket | null = null;
   let sharedSecret: CryptoKey | null = null;
-  const parser = new ClaudeOutputParser();
 
-  const debug = !!process.env.POCKET_AI_DEBUG;
-
-  shell.onData((data: string) => {
-    process.stdout.write(data); // 로컬 터미널은 raw ANSI 그대로
-
-    // Also relay to remote clients if connected and key is derived
+  // JSONL session watcher — reads Claude Code's native transcript file
+  // instead of parsing fragile PTY/ANSI output
+  const sessionWatcher = new ClaudeSessionWatcher(process.cwd(), (events) => {
     if (sharedSecret && socket) {
-      const events = parser.feed(data);
-      if (debug && events.length > 0) {
-        process.stderr.write(`[POCKET] events: ${JSON.stringify(events.map(e => ({
-          t: e.t,
-          ...(e.t === 'text' ? { txt: e.text?.slice(0, 40) } : {}),
-          ...(e.t === 'tool-call' ? { name: (e as any).name } : {}),
-        })))}\n`);
-      }
-      if (debug && events.length === 0 && data.length > 10) {
-        process.stderr.write(`[POCKET] no events for ${data.length}b chunk\n`);
-      }
       for (const event of events) {
         encrypt(JSON.stringify(event), sharedSecret)
           .then((encrypted) => {
@@ -86,9 +71,14 @@ export async function startSession(command: string = 'claude', options: { remote
               body: encrypted,
             });
           })
-          .catch(() => { }); // Non-critical: remote relay failure shouldn't break local
+          .catch(() => { });
       }
     }
+  });
+  sessionWatcher.start();
+
+  shell.onData((data: string) => {
+    process.stdout.write(data); // 로컬 터미널은 raw ANSI 그대로 (변경 없음)
   });
 
   // Handle local keyboard input
@@ -108,16 +98,7 @@ export async function startSession(command: string = 'claude', options: { remote
   // Handle CLI process exit
   shell.onExit(({ exitCode }: { exitCode: number }) => {
     console.log(`\nAI CLI 프로세스가 종료되었습니다 (code: ${exitCode})`);
-    // flush remaining parser state
-    if (sharedSecret && socket) {
-      for (const event of parser.flush()) {
-        encrypt(JSON.stringify(event), sharedSecret)
-          .then((encrypted) => {
-            socket!.emit('update', { sessionId, sender: 'cli', body: encrypted });
-          })
-          .catch(() => { });
-      }
-    }
+    sessionWatcher.destroy();
     if (socket) socket.disconnect();
     process.exit(exitCode);
   });
@@ -206,6 +187,7 @@ export async function startSession(command: string = 'claude', options: { remote
   // Graceful shutdown
   const cleanup = () => {
     watcher.stop();
+    sessionWatcher.destroy();
     shell.kill();
     if (socket) socket.disconnect();
     process.exit(0);

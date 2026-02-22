@@ -99,13 +99,12 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                     const msg = JSON.parse(decryptedJson);
 
                     if (msg.t === 'text') {
-                        setMessages(prev => {
-                            const last = prev[prev.length - 1];
-                            if (last?.kind === 'text') {
-                                return [...prev.slice(0, -1), { ...last, content: last.content + msg.text }];
-                            }
-                            return [...prev, { kind: 'text', id: crypto.randomUUID(), content: msg.text }];
-                        });
+                        // AI responses always start a new bubble (from JSONL watcher)
+                        setMessages(prev => [...prev, {
+                            kind: 'text',
+                            id: crypto.randomUUID(),
+                            content: msg.text,
+                        }]);
                     }
 
                     if (msg.t === 'tool-call') {
@@ -171,14 +170,12 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
         const text = inputValue;
         setInputValue('');
 
-        // Show sent message immediately in chat
-        setMessages(prev => {
-            const last = prev[prev.length - 1];
-            if (last?.kind === 'text') {
-                return [...prev.slice(0, -1), { ...last, content: last.content + text + '\n' }];
-            }
-            return [...prev, { kind: 'text', id: crypto.randomUUID(), content: text + '\n' }];
-        });
+        // Show sent message immediately in chat (always new bubble)
+        setMessages(prev => [...prev, {
+            kind: 'text',
+            id: crypto.randomUUID(),
+            content: text + '\n',
+        }]);
 
         try {
             const msgStr = JSON.stringify({ t: 'text', text: text + '\r' });
