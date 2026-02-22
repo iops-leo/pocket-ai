@@ -5,7 +5,7 @@ import jwt from '@fastify/jwt';
 import { Server } from 'socket.io';
 import { setupSocketIO } from './socket.js';
 import { authRoutes } from './routes/auth.js';
-import { sessionRoutes } from './routes/sessions.js';
+import { sessionRoutes, loadSessionsFromDB } from './routes/sessions.js';
 import oauthPlugin from '@fastify/oauth2';
 
 const fastify = Fastify({
@@ -73,6 +73,9 @@ const start = async () => {
         const port = parseInt(process.env.PORT || '3001', 10);
         await fastify.listen({ port, host: '0.0.0.0' });
         console.log(`Server listening at http://0.0.0.0:${port}`);
+
+        // 서버 시작 후 DB에서 세션 복원
+        await loadSessionsFromDB();
     } catch (err) {
         fastify.log.error(err);
         process.exit(1);

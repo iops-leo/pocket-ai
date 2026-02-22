@@ -27,10 +27,21 @@ export interface SubscriptionTable {
     updated_at: Generated<Date>;
 }
 
+export interface SessionTable {
+    id: string;          // UUID (CLI가 생성)
+    user_id: string;
+    public_key: string;  // ECDH 공개키 (Base64)
+    metadata: string;    // JSON string (hostname, engine 등)
+    status: string;      // 'online' | 'offline'
+    created_at: Generated<Date>;
+    updated_at: Generated<Date>;
+}
+
 export interface Database {
     users: UserTable;
     oauth_accounts: OAuthAccountTable;
     subscriptions: SubscriptionTable;
+    sessions: SessionTable;
 }
 
 // Ensure you set DATABASE_URL in .env
