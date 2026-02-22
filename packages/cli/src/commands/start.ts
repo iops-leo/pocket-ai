@@ -5,11 +5,10 @@ import { getToken } from '../config.js';
 import { connectToServer, registerSession } from '../server/connection.js';
 import type { Socket } from 'socket.io-client';
 
-export const startCommand = new Command('start')
-  .description('AI CLI 세션 시작 (현재: foreground 모드)')
-  .argument('[command]', 'AI CLI 명령어', 'claude')
-  .option('--no-remote', '원격 접속 비활성화 (로컬 전용)')
-  .action(async (command: string, options) => {
+/**
+ * AI CLI 세션 시작 (Happy 스타일 심플 래퍼)
+ */
+export async function startSession(command: string = 'claude', options: { remote?: boolean } = {}) {
     const token = getToken();
     if (!token) {
       console.error('로그인이 필요합니다. pocket-ai login을 먼저 실행하세요.');
@@ -144,4 +143,10 @@ export const startCommand = new Command('start')
 
     process.on('SIGINT', cleanup);
     process.on('SIGTERM', cleanup);
-  });
+}
+
+export const startCommand = new Command('start')
+  .description('AI CLI 세션 시작 (고급: 특정 AI 엔진 지정)')
+  .argument('[command]', 'AI CLI 명령어', 'claude')
+  .option('--no-remote', '원격 접속 비활성화 (로컬 전용)')
+  .action(startSession);

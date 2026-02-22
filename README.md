@@ -4,6 +4,24 @@
 
 모바일/웹 PWA에서 로컬 AI CLI 세션을 원격 제어하는 플랫폼입니다.
 
+## 빠른 시작 (Happy 스타일 심플 사용법)
+
+```bash
+# 1. 설치 및 로그인 (최초 1회)
+npm install -g @pocket-ai/cli
+pocket-ai login
+
+# 2. 사용 (이게 전부!)
+pocket-ai
+# → claude 자동 실행
+# → PWA에서 즉시 접속 가능
+# → 어디서든 이어서 작업
+
+# 3. 선택적 고급 사용
+pocket-ai start codex       # Codex 사용
+pocket-ai --no-remote       # 로컬 전용 모드
+```
+
 ## 핵심 가치
 
 - **세션 연속성**: 출퇴근길, 회의 중에도 PC 작업 이어서 진행
