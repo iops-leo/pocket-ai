@@ -19,15 +19,31 @@ const stripAnsi = (str: string) =>
         .replace(/\x1b/g, '');
 
 /**
- * Detect Claude Code TUI chrome: startup screen, borders, status bars.
- * These are not meaningful chat content.
+ * Detect lines that are terminal chrome, not meaningful chat content:
+ * - Claude Code TUI startup screen (box borders, block chars)
+ * - OMC/HUD status bar: [OMC] | 5h:11%...
+ * - Shell prompt lines: ❯, %
+ * - Pure separator lines: ─────, ━━━━━
  */
 const isTuiChrome = (line: string): boolean => {
     const trimmed = line.trimStart();
     if (!trimmed) return true;
-    // Lines starting with box-drawing border chars
-    if ('╭╮╰╯─━═'.includes(trimmed[0])) return true;
-    // Lines with high density of UI/block chars (borders, progress bars, etc.)
+
+    const firstChar = trimmed[0];
+
+    // Box-drawing border lines (startup screen)
+    if ('╭╮╰╯━═'.includes(firstChar)) return true;
+
+    // Lines consisting entirely of ─ (common separator)
+    if (/^─+$/.test(trimmed)) return true;
+
+    // OMC/HUD status bar: [TAG] | ... pattern
+    if (/^\[[\w-]+\]/.test(trimmed)) return true;
+
+    // Shell prompt: ❯, %, $
+    if (firstChar === '❯' || firstChar === '%' || firstChar === '$') return true;
+
+    // Lines with high density of UI/block chars (borders, spinners, etc.)
     const uiChars = (line.match(/[╭╮╰╯│─━═╔╗╚╝║▀▄█▌▐░▒▓▟▙▖▗▘▝▞▚]/g) ?? []).length;
     return uiChars >= 3 && uiChars / line.length > 0.2;
 };
