@@ -52,11 +52,22 @@ export async function startSession(command = 'claude', options = {}) {
     let socket = null;
     let sharedSecret = null;
     const parser = new ClaudeOutputParser();
+    const debug = !!process.env.POCKET_AI_DEBUG;
     shell.onData((data) => {
         process.stdout.write(data); // 로컬 터미널은 raw ANSI 그대로
         // Also relay to remote clients if connected and key is derived
         if (sharedSecret && socket) {
             const events = parser.feed(data);
+            if (debug && events.length > 0) {
+                process.stderr.write(`[POCKET] events: ${JSON.stringify(events.map(e => ({
+                    t: e.t,
+                    ...(e.t === 'text' ? { txt: e.text?.slice(0, 40) } : {}),
+                    ...(e.t === 'tool-call' ? { name: e.name } : {}),
+                })))}\n`);
+            }
+            if (debug && events.length === 0 && data.length > 10) {
+                process.stderr.write(`[POCKET] no events for ${data.length}b chunk\n`);
+            }
             for (const event of events) {
                 encrypt(JSON.stringify(event), sharedSecret)
                     .then((encrypted) => {

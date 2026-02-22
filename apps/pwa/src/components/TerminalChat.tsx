@@ -181,7 +181,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
         });
 
         try {
-            const msgStr = JSON.stringify({ t: 'text', text: text + '\n' });
+            const msgStr = JSON.stringify({ t: 'text', text: text + '\r' });
             const encryptedBody = await encrypt(msgStr, sharedSecretRef.current);
 
             socketRef.current.emit('update', {
