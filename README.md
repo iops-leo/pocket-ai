@@ -166,9 +166,13 @@ pocket-ai remote <session-id>  # 세션 원격 접속
 
 ## 지원 AI CLI
 
-- [x] Claude Code (`claude`)
-- [ ] OpenAI Codex CLI (`codex`)
-- [ ] Google Gemini CLI (`gemini`)
+| CLI | 커맨드 | 설치 | 상태 |
+|-----|--------|------|------|
+| Claude Code | `pocket-ai` | `npm i -g @anthropic-ai/claude-code` | ✅ 기본값 |
+| OpenAI Codex | `pocket-ai start codex` | `npm i -g @openai/codex` | ✅ 지원 (바이너리 설치 필요) |
+| Google Gemini | `pocket-ai start gemini` | `npm i -g @google/gemini-cli` | ✅ 지원 (바이너리 설치 필요) |
+
+> **새 AI CLI 추가 공수**: 표준 인터랙티브 터미널 CLI라면 코드 변경 없이 바로 됨. `pocket-ai start <바이너리이름>` 형태로 모든 CLI 래핑 가능.
 
 ## 개발 로드맵
 
