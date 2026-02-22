@@ -4,6 +4,7 @@ import { generateECDHKeyPair, exportPublicKey, importPublicKey, deriveSharedSecr
 import { getToken } from '../config.js';
 import { connectToServer, registerSession } from '../server/connection.js';
 import type { Socket } from 'socket.io-client';
+import { SessionWatcher, getSessionKey, getSessionDisplayName, isValidEngine } from '../session-manager.js';
 
 /**
  * AI CLI 세션 시작 (Happy 스타일 심플 래퍼)
@@ -134,8 +135,44 @@ export async function startSession(command: string = 'claude', options: { remote
       });
     }
 
+    // 7. Happy 스타일 폴더 변경 감지 (선택적 기능)
+    const watcher = new SessionWatcher(command);
+    watcher.onCwdChange((oldKey, newKey) => {
+      console.log(`\n[Pocket AI] 폴더 변경 감지: ${getSessionDisplayName(oldKey)} → ${getSessionDisplayName(newKey)}`);
+      console.log('현재 세션을 계속 사용합니다. 새 세션을 시작하려면 Ctrl+C 후 pocket-ai를 다시 실행하세요.\n');
+      // TODO: 데몬 모드에서는 자동으로 새 세션 시작
+    });
+    watcher.start();
+
+    // 8. CLI 내부 명령어 처리 (Happy 스타일 /switch)
+    let commandBuffer = '';
+    const originalStdinListener = process.stdin.listeners('data')[0];
+    process.stdin.removeAllListeners('data');
+
+    process.stdin.on('data', (data: Buffer) => {
+      const input = data.toString();
+
+      // /switch 명령어 감지
+      if (input.startsWith('/switch ')) {
+        const newEngine = input.slice(8).trim();
+        if (isValidEngine(newEngine)) {
+          console.log(`\n[Pocket AI] AI 엔진을 ${newEngine}으로 전환합니다...`);
+          // TODO: 현재 세션 종료 후 새 엔진으로 재시작
+          console.log('(구현 예정: 현재는 수동으로 Ctrl+C 후 pocket-ai start ' + newEngine + ' 실행)\n');
+        } else {
+          console.log(`\n[Pocket AI] 지원하지 않는 엔진입니다: ${newEngine}`);
+          console.log('지원 엔진: claude, codex, gemini\n');
+        }
+        return;
+      }
+
+      // 일반 입력은 AI CLI로 전달
+      shell.write(input);
+    });
+
     // Graceful shutdown
     const cleanup = () => {
+      watcher.stop();
       shell.kill();
       if (socket) socket.disconnect();
       process.exit(0);

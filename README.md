@@ -17,7 +17,12 @@ pocket-ai
 # → PWA에서 즉시 접속 가능
 # → 어디서든 이어서 작업
 
-# 3. 선택적 고급 사용
+# 3. Happy 스타일 세션 관리
+cd /project/A          # 폴더별 자동 세션 분리
+/switch gemini         # 세션 내에서 AI 엔진 전환
+cd /project/B          # 자동으로 새 세션 시작
+
+# 4. 선택적 고급 사용
 pocket-ai start codex       # Codex 사용
 pocket-ai --no-remote       # 로컬 전용 모드
 ```
