@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ArrowLeft, Loader2, WifiOff, ClipboardPaste } from 'lucide-react';
+import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, ArrowUp } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt } from '@pocket-ai/wire';
 import 'xterm/css/xterm.css';
@@ -14,6 +14,7 @@ interface TerminalChatProps {
 export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
     const [isConnecting, setIsConnecting] = useState(true);
     const [isDisconnected, setIsDisconnected] = useState(false);
+    const [inputValue, setInputValue] = useState('');
 
     const terminalRef = useRef<HTMLDivElement>(null);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,7 +47,6 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
 
                     setIsConnecting(false);
                     setIsDisconnected(false);
-                    term.writeln('\r\n\x1b[32m[Pocket AI] 🔒 End-to-End Encrypted connection established.\x1b[0m\r\n');
                 } catch (e) {
                     console.error('E2E Setup Failed', e);
                     term.writeln('\r\n\x1b[31m[Pocket AI] E2E Setup Failed.\x1b[0m\r\n');
@@ -160,7 +160,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                 }
             });
 
-            // Handle user typing
+            // Handle user typing natively inside the terminal if they manage to focus it
             term.onData(async (data: string) => {
                 if (!sharedSecretRef.current || isDisconnected) return;
                 try {
@@ -206,6 +206,32 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
             }
         } catch (e) {
             console.error('Failed to read clipboard', e);
+        }
+    };
+
+    const handleSend = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!inputValue.trim() || !socketRef.current || !sharedSecretRef.current || isDisconnected) return;
+
+        try {
+            const msgStr = JSON.stringify({ t: 'text', text: inputValue + '\r' });
+            const encryptedBody = await encrypt(msgStr, sharedSecretRef.current);
+
+            socketRef.current.emit('update', {
+                t: 'encrypted',
+                sessionId,
+                sender: 'pwa',
+                body: encryptedBody
+            });
+
+            setInputValue('');
+
+            // Allow focus to remain on input for consecutive typing
+            setTimeout(() => {
+                termInstance.current?.scrollToBottom();
+            }, 50);
+        } catch (err) {
+            console.error('Failed to send message', err);
         }
     };
 
@@ -271,6 +297,32 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                         className="absolute inset-x-0 inset-y-0 terminal-container custom-scrollbar"
                         style={{ padding: '8px' }}
                     />
+                </div>
+
+                {/* Mobile Input Overlay to hide CLI status bar and provide comfortable standard chat text entry */}
+                <div className="absolute bottom-0 left-0 right-0 h-[100px] bg-gradient-to-t from-gray-950 via-gray-950 to-transparent pointer-events-none flex flex-col justify-end z-20">
+                    <div className="h-[68px] bg-gray-950 w-full px-4 pb-4 sm:pb-5 pointer-events-auto flex items-center">
+                        <form
+                            onSubmit={handleSend}
+                            className="bg-gray-900 border border-gray-700/60 rounded-full flex items-center pr-2 pl-4 py-1.5 shadow-xl w-full transition-all focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/50"
+                        >
+                            <input
+                                type="text"
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                placeholder="채팅 메시지 전송..."
+                                className="flex-1 bg-transparent text-gray-100 placeholder-gray-500 outline-none h-10 text-[16px]"
+                                autoComplete="off"
+                            />
+                            <button
+                                type="submit"
+                                disabled={!inputValue.trim() || isDisconnected}
+                                className="w-9 h-9 flex justify-center items-center bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 text-white rounded-full transition-colors ml-2 flex-shrink-0"
+                            >
+                                <ArrowUp size={18} strokeWidth={2.5} />
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </main>
         </div>

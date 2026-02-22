@@ -31,7 +31,7 @@ pocket-ai --no-remote       # 로컬 전용 모드
 
 - **세션 연속성**: 출퇴근길, 회의 중에도 PC 작업 이어서 진행
 - **데몬 방식**: 터미널을 닫아도 백그라운드에서 세션 유지
-- **비용 최적화**: 초기 무료~$3/월, 성장 후 사용량 기반 과금
+- **비용 최적화**: MVP 완전 무료, 성장 후 사용량 기반 과금 (5천 명까지 $20/월)
 - **간편한 설정**: GitHub OAuth 로그인만으로 디바이스 자동 연결
 - **E2E 암호화**: 서버는 암호화된 메시지만 중계 (복호화 불가)
 
@@ -42,7 +42,7 @@ pocket-ai --no-remote       # 로컬 전용 모드
 │   PWA Client    │     │  Relay Server   │     │  PC CLI (daemon)│
 │   (Vercel)      │────▶│  Fastify +      │◀────│  @pocket-ai/cli │
 └─────────────────┘     │  Socket.IO      │     └─────────────────┘
-        │               │  (Fly.io)       │             │
+        │               │  (Railway)       │             │
         │  Socket.IO    │                 │             ▼
         │  + E2E 암호화 │  PostgreSQL     │     ┌─────────────────┐
         │  (AES-256-GCM)│  (Kysely)       │     │  Claude Code    │
@@ -64,7 +64,7 @@ pocket-ai --no-remote       # 로컬 전용 모드
 ```
 pocket-ai/
 ├── apps/
-│   ├── server/      # Fastify + Socket.IO 릴레이 (Fly.io 배포)
+│   ├── server/      # Fastify + Socket.IO 릴레이 (Railway 배포)
 │   └── pwa/         # Next.js PWA 클라이언트 (Vercel 배포, Phase 2: 네이티브)
 ├── packages/
 │   ├── cli/         # CLI 래퍼 + 원격 제어 통합 - `claude` 대신 `pocket-ai` 실행, 데몬 관리
@@ -84,8 +84,8 @@ pocket-ai/
 | 컴포넌트 | 기술 | 배포 |
 |---------|------|------|
 | PWA | Next.js 14+ (App Router) | Vercel (무료) |
-| Server | Fastify + Socket.IO (pure relay) | Fly.io |
-| Database | PostgreSQL | Fly.io PostgreSQL |
+| Server | Fastify + Socket.IO (pure relay) | Railway |
+| Database | PostgreSQL | Supabase |
 | CLI | Node.js + node-pty (래퍼 + 원격 제어 통합) | 로컬 (npm -g) |
 | 암호화 | ECDH P-256 + AES-256-GCM | Web Crypto / Node crypto |
 
@@ -111,7 +111,7 @@ pocket-ai remote <session-id>  # 세션 원격 접속
 
 ### PWA 접속 및 디바이스 페어링
 
-1. 브라우저에서 https://pocket-ai.app 접속
+1. 브라우저에서 https://pocket-ai-pwa.vercel.app 접속
 2. GitHub OAuth로 계정 생성/로그인
 3. PC에서 `pocket-ai start` 실행 (같은 계정으로 로그인)
 4. PWA 대시보드에 활성 PC 세션 자동 표시
@@ -126,21 +126,25 @@ pocket-ai remote <session-id>  # 세션 원격 접속
 ## 비용 예상
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          월간 비용 예상                                   │
-├─────────────────────────────────────────────────────────────────────────┤
-│  사용자 수  │  인프라                       │  월 비용                   │
-├─────────────────────────────────────────────────────────────────────────┤
-│  1-100      │  Fly.io + PG free tier       │  $0-3                      │
-│  100-1K     │  Fly.io + PG                 │  $10-20                    │
-│  1K-10K     │  Fly.io x2 + PG + Redis      │  $50-100                   │
-│  10K+       │  Multi-region                │  $300+                     │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│              월간 인프라 비용 (Railway + Supabase + Vercel 기준)           │
+│                     순수 릴레이 + 메시지 무저장 구조                        │
+├─────────────┬──────────────────────────────┬──────────────────────────────┤
+│  사용자 수   │  인프라                       │  월 비용                     │
+├─────────────┼──────────────────────────────┼──────────────────────────────┤
+│  1-100      │  Railway 무료 + Supabase 무료 │  $0                          │
+│  100-1K     │  Railway Hobby               │  $5                          │
+│  1K-5K      │  Railway Pro                 │  $20                         │
+│  5K-10K     │  Railway Pro + 리소스 증설    │  $30-50                      │
+│  10K+       │  Railway Team + Supabase Pro  │  $75-150                     │
+└─────────────┴──────────────────────────────┴──────────────────────────────┘
 ```
+
+> **비용이 낮은 이유**: 메시지를 저장하지 않아 DB는 Supabase 무료 티어로 수만 명 버팀. WebSocket 릴레이는 CPU 부담이 거의 없어 소형 서버로도 충분.
 
 ## 상업용 비전
 
-### Phase 1: MVP (무료~$8/월)
+### Phase 1: MVP (완전 무료)
 - 개인 사용자 타겟
 - CLI + Server + PWA + GitHub OAuth 로그인 + 계정 기반 자동 연결 + E2E 암호화 + 데몬
 
@@ -168,15 +172,16 @@ pocket-ai remote <session-id>  # 세션 원격 접속
 
 ## 개발 로드맵
 
-### Phase 1: MVP
+### Phase 1: MVP ✅ 완료
 - [x] 프로젝트 구조 설계
-- [ ] `@pocket-ai/cli` 구현 (Claude Code 래핑 + 데몬)
-- [ ] Socket.IO 릴레이 서버 (Fastify + Prisma + PostgreSQL)
-- [ ] PWA 클라이언트 (채팅 UI)
-- [ ] GitHub OAuth 로그인 + JWT 인증
-- [ ] ECDH P-256 기반 E2E 암호화 키 교환
+- [x] `@pocket-ai/cli` 구현 (Claude Code 래핑 + 데몬)
+- [x] Socket.IO 릴레이 서버 (Fastify + Kysely + PostgreSQL)
+- [x] PWA 클라이언트 (채팅 UI)
+- [x] GitHub OAuth 로그인 + JWT 인증
+- [x] ECDH P-256 기반 E2E 암호화 키 교환
 - [x] AES-256-GCM E2E 암호화
-- [ ] 로컬/원격 모드 전환
+- [x] 로컬/원격 모드 전환
+- [x] Railway + Supabase + Vercel 배포 완료
 
 ### Phase 2: 안정화 + 네이티브
 - [ ] 푸시 알림
