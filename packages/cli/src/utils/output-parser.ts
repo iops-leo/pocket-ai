@@ -1,8 +1,36 @@
 import crypto from 'crypto';
 import type { SessionPayload } from '@pocket-ai/wire';
 
+/**
+ * Comprehensive ANSI/VT escape sequence stripper.
+ * Handles: CSI (color/cursor), OSC (title), 2-char ESC sequences, C1 controls.
+ */
 const stripAnsi = (str: string) =>
-    str.replace(/[\x1b\x9b](?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+    str
+        // OSC sequences: ESC ] ... BEL or ESC \
+        .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+        // CSI sequences: ESC [ params final (includes private ?/! modes)
+        .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+        // 2-char ESC sequences (save/restore cursor, charset, scroll, etc.)
+        .replace(/\x1b[\x20-\x7e]/g, '')
+        // C1 control codes (8-bit equivalents of ESC + Fe)
+        .replace(/[\x80-\x9f]/g, '')
+        // Remaining stray ESC
+        .replace(/\x1b/g, '');
+
+/**
+ * Detect Claude Code TUI chrome: startup screen, borders, status bars.
+ * These are not meaningful chat content.
+ */
+const isTuiChrome = (line: string): boolean => {
+    const trimmed = line.trimStart();
+    if (!trimmed) return true;
+    // Lines starting with box-drawing border chars
+    if ('╭╮╰╯─━═'.includes(trimmed[0])) return true;
+    // Lines with high density of UI/block chars (borders, progress bars, etc.)
+    const uiChars = (line.match(/[╭╮╰╯│─━═╔╗╚╝║▀▄█▌▐░▒▓▟▙▖▗▘▝▞▚]/g) ?? []).length;
+    return uiChars >= 3 && uiChars / line.length > 0.2;
+};
 
 // Claude Code tool call pattern: ⏺ ToolName(args...)
 const TOOL_PATTERN = /^[⏺●▶◆✦]\s+(\w[\w.]*)\((.*)/;
@@ -19,8 +47,10 @@ export class ClaudeOutputParser {
         this.lineBuffer = parts.pop() ?? '';
 
         for (const part of parts) {
-            // \r 처리: 인플레이스 업데이트는 마지막 segment만 사용
-            const segments = part.split('\r');
+            // 1. Strip trailing \r from \r\n line endings (PTY always sends \r\n)
+            //    THEN handle inline \r updates (progress indicators: "50%\r100%")
+            const cleanPart = part.replace(/\r$/, '');
+            const segments = cleanPart.split('\r');
             const finalSegment = segments[segments.length - 1];
             const clean = stripAnsi(finalSegment).trimEnd();
 
@@ -29,7 +59,7 @@ export class ClaudeOutputParser {
             const toolMatch = clean.trimStart().match(TOOL_PATTERN);
 
             if (toolMatch) {
-                // 이전 툴 결과 flush
+                // Flush previous tool result
                 if (this.currentToolId) {
                     events.push({
                         t: 'tool-result',
@@ -47,12 +77,12 @@ export class ClaudeOutputParser {
                 events.push({ t: 'tool-call', id, name, arguments: args });
 
             } else if (this.currentToolId) {
-                // 들여쓰기 없는 라인 → tool output 종료, 텍스트로 전환
+                // Collect tool output (indented or box-bordered lines)
                 const isIndented = clean.startsWith('  ') || clean.startsWith('\t');
                 if (isIndented || clean.startsWith('│') || clean.startsWith('|')) {
                     this.toolOutputLines.push(clean.trim());
                 } else {
-                    // flush tool result
+                    // Non-indented line ends the tool output block
                     events.push({
                         t: 'tool-result',
                         id: this.currentToolId,
@@ -60,11 +90,15 @@ export class ClaudeOutputParser {
                     });
                     this.currentToolId = null;
                     this.toolOutputLines = [];
-                    // 현재 라인은 텍스트
-                    events.push({ t: 'text', text: clean + '\n' });
+                    if (!isTuiChrome(clean)) {
+                        events.push({ t: 'text', text: clean + '\n' });
+                    }
                 }
             } else {
-                events.push({ t: 'text', text: clean + '\n' });
+                // Regular text — skip TUI chrome (startup screen, borders, status bars)
+                if (!isTuiChrome(clean)) {
+                    events.push({ t: 'text', text: clean + '\n' });
+                }
             }
         }
 
