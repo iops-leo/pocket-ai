@@ -155,6 +155,15 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
         }
     };
 
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        // Korean/Japanese/Chinese IME: isComposing=true means composition in progress
+        // Don't submit during IME composition; wait for confirmed Enter
+        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            handleSend();
+        }
+    };
+
     const handleSend = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         if (!inputValue.trim() || !socketRef.current || !sharedSecretRef.current || isDisconnected) return;
@@ -266,6 +275,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                                 type="text"
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
+                                onKeyDown={handleKeyDown}
                                 placeholder="채팅 메시지 전송..."
                                 className="flex-1 bg-transparent text-gray-100 placeholder-gray-500 outline-none h-10 text-[16px]"
                                 autoComplete="off"
