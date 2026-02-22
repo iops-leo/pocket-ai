@@ -300,8 +300,34 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                 </div>
 
                 {/* Mobile Input Overlay to hide CLI status bar and provide comfortable standard chat text entry */}
-                <div className="absolute bottom-0 left-0 right-0 h-[100px] bg-gradient-to-t from-gray-950 via-gray-950 to-transparent pointer-events-none flex flex-col justify-end z-20">
-                    <div className="h-[68px] bg-gray-950 w-full px-4 pb-4 sm:pb-5 pointer-events-auto flex items-center">
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-gray-950 via-gray-950 to-transparent pointer-events-none flex flex-col justify-end z-20">
+
+                    {/* Quick Action Chips (Slash Commands) */}
+                    {!isDisconnected && !isConnecting && (
+                        <div className="w-full px-4 pb-2 pointer-events-auto overflow-x-auto no-scrollbar flex gap-2 snap-x">
+                            {[
+                                { label: '🔄 Claude', cmd: '/switch claude' },
+                                { label: '💎 Gemini', cmd: '/switch gemini' },
+                                { label: '⚡ Codex', cmd: '/switch codex' },
+                                { label: '🧹 화면 정리', cmd: 'clear' },
+                            ].map((action, idx) => (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => {
+                                        setInputValue(action.cmd);
+                                        // Optional: Auto-focus the input or submit immediately
+                                        // To submit immediately, extract the send logic to a reusable function.
+                                    }}
+                                    className="snap-start whitespace-nowrap px-3 py-1.5 rounded-full bg-gray-800/80 hover:bg-gray-700 text-gray-300 text-xs font-medium border border-gray-700/50 backdrop-blur-md transition-colors"
+                                >
+                                    {action.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="bg-gray-950 w-full px-4 pb-4 sm:pb-5 pointer-events-auto flex items-center pt-1">
                         <form
                             onSubmit={handleSend}
                             className="bg-gray-900 border border-gray-700/60 rounded-full flex items-center pr-2 pl-4 py-1.5 shadow-xl w-full transition-all focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/50"
