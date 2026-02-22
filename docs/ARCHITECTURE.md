@@ -258,7 +258,7 @@ apps/pwa/
 **핵심 기능**:
 - 계정 로그인으로 자동 세션 발견 + ECDH 키교환
 - E2E 암호화 메시지 송수신 (구조화 채팅 UI: 텍스트 블록 + 툴 카드)
-- CLI output-parser: ANSI 스트림에서 `⏺ ToolName(args)` 패턴 감지 → tool-call/tool-result 이벤트 분리
+- CLI로부터 `text` / `tool-call` / `tool-result` 구조화 이벤트 수신 → 각 이벤트는 항상 새 버블로 렌더링
 - Socket.IO 자동 재연결
 - PWA 설치 가능
 
@@ -301,8 +301,8 @@ socket.on('update', async (payload) => {
     const msg = JSON.parse(decrypted)
 
     if (msg.t === 'text') {
-      // 기존 텍스트 블록에 append 또는 새 블록 추가
-      setMessages(prev => { ... })
+      // AI 응답 텍스트 — 항상 새 버블 생성 (JSONL 한 턴 = 완전한 응답 하나)
+      setMessages(prev => [...prev, { kind: 'text', id: crypto.randomUUID(), content: msg.text }])
     }
     if (msg.t === 'tool-call') {
       // 툴 카드 추가 (running 상태)
@@ -322,52 +322,41 @@ socket.emit('update', { t: 'encrypted', sessionId, sender: 'pwa', body: encrypte
 
 ---
 
-### packages/cli/ (CLI 래퍼 + 원격 제어 통합) [미구현]
+### packages/cli/ (CLI 래퍼 + 원격 제어 통합)
 
-**역할**: AI CLI(claude, codex 등) 래핑 + 로컬/리모트 모드 전환 + 데몬 프로세스 + 원격 세션 제어
+**역할**: AI CLI(claude, codex 등) 래핑 + JSONL 세션 감시 + E2E 암호화 릴레이
 
 ```
 packages/cli/
 ├── src/
-│   ├── index.ts              # CLI 진입점
-│   ├── cli.ts                # 메인 CLI 클래스
+│   ├── index.ts              # CLI 진입점 (commander)
 │   ├── commands/
-│   │   ├── start.ts          # AI CLI 시작 + 데몬
+│   │   ├── start.ts          # AI CLI 시작 (메인 커맨드)
 │   │   ├── remote.ts         # 원격 세션 접속
 │   │   ├── status.ts         # 데몬 상태
 │   │   ├── stop.ts           # 데몬 종료
 │   │   └── login.ts          # GitHub OAuth 로그인
-│   ├── daemon/
-│   │   ├── process.ts        # 데몬 프로세스 관리
-│   │   ├── ipc.ts            # 데몬-포그라운드 IPC 통신
-│   │   └── lifecycle.ts      # 데몬 시작/중지/상태
-│   ├── mode/
-│   │   ├── local.ts          # 로컬 모드
-│   │   ├── remote.ts         # 리모트 모드
-│   │   └── switch.ts         # 모드 전환 로직
-│   ├── wrapper/
-│   │   ├── base.ts           # CLI 래퍼 베이스
-│   │   └── claude.ts         # Claude Code 래퍼
 │   ├── server/
-│   │   ├── connection.ts     # Socket.IO 서버 연결
-│   │   └── heartbeat.ts      # 연결 유지
-│   └── crypto.ts             # ECDH 키교환 + AES-256-GCM
+│   │   └── connection.ts     # Socket.IO 서버 연결 + 키교환 처리
+│   ├── utils/
+│   │   ├── session-watcher.ts # JSONL 세션 파일 폴링 → 구조화 이벤트 추출
+│   │   └── output-parser.ts  # (레거시: ANSI 파서, 현재 미사용)
+│   ├── session-manager.ts    # CWD 변경 감지, 세션 키 관리
+│   └── config.ts             # 서버 URL, 토큰 저장
 ├── bin/
 │   └── pocket-ai.js          # CLI 진입점
 └── package.json
 ```
 
 **핵심 기능**:
-- AI CLI 프로세스 관리 (node-pty)
-- **데몬 프로세스**: 터미널을 닫아도 세션 유지
-- **로컬/리모트 모드 전환**: 키보드 입력 → 로컬, 폰 입력 → 리모트
-- ECDH P-256 키쌍 생성 후 공개키를 서버에 등록
+- AI CLI 프로세스 스폰 (node-pty) + 로컬 터미널에 raw ANSI 출력 그대로 전달
+- **JSONL 세션 감시** (`ClaudeSessionWatcher`): Claude Code가 기록하는 `~/.claude/projects/{escaped-cwd}/{session}.jsonl` 파일을 500ms 폴링으로 읽어 완전한 응답 추출
+  - PTY ANSI 파싱 방식의 문제: 전체화면 TUI가 스트리밍 토큰마다 전체 재렌더링 → 동일 행 반복 출력 → 구조화 이벤트 추출 불가
+  - JSONL 방식: 턴 완료 후 하나의 완전한 `assistant` 엔트리 기록 → 정확한 텍스트/툴 이벤트 추출
+- ECDH P-256 키쌍 생성 후 공개키를 서버에 등록 → PWA와 공유 비밀키 파생
 - Socket.IO로 서버 연결 및 자동 재연결
-- 세션 프로토콜 이벤트 발행
-- `pocket-ai remote <session-id>` - 원격 세션 실시간 연결
-- `pocket-ai status` - 데몬 상태 확인
-- `pocket-ai stop` - 데몬 종료
-- `pocket-ai login` - GitHub OAuth 로그인
+- PWA 메시지 수신 → `shell.write()` → AI CLI에 전달
+- `pocket-ai login` — GitHub OAuth 로그인
 
 **기술 스택**:
 - Runtime: Node.js 20+
@@ -452,11 +441,19 @@ packages/wire/
 ```typescript
 // wire/src/types.ts 에 정의된 SessionPayload 타입
 type SessionPayload =
-  | { type: 'text'; content: string; role: 'user' | 'assistant' }
-  | { type: 'tool-call'; toolName: string; params?: Record<string, unknown> }
-  | { type: 'tool-result'; toolName: string; result?: string; error?: string }
-  | { type: 'session-event'; event: string; data?: unknown }
+  | { t: 'text'; text: string }
+  | { t: 'tool-call'; id: string; name: string; arguments: string }
+  | { t: 'tool-result'; id: string; result: string; error?: string }
+  | { t: 'session-event'; event: string; data?: unknown }
 ```
+
+**JSONL → SessionPayload 변환 (ClaudeSessionWatcher)**:
+
+| JSONL 엔트리 | SessionPayload |
+|--------------|---------------|
+| `assistant.content[].type === 'text'` | `{ t: 'text', text }` |
+| `assistant.content[].type === 'tool_use'` | `{ t: 'tool-call', id, name, arguments: JSON.stringify(input) }` |
+| `user.content[].type === 'tool_result'` | `{ t: 'tool-result', id: tool_use_id, result }` |
 
 ---
 
@@ -950,6 +947,7 @@ POCKET_AI_LOG_LEVEL=info
 | 모드 전환 (로컬↔리모트) | < 100ms |
 | 데몬 세션 복구 | < 500ms |
 | CLI 응답 | 100ms - 수초 (명령어 따라) |
+| JSONL 폴링 지연 | < 500ms (응답 완료 후 ~ 500ms 이내 감지) |
 | **총 왕복** | **200ms - 수초** |
 
 ---
