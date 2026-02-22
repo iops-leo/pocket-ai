@@ -50,6 +50,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                     setMessages(prev => [...prev, {
                         kind: 'text',
                         id: crypto.randomUUID(),
+                        role: 'assistant' as const,
                         content: '[Pocket AI] E2E Setup Failed.\n'
                     }]);
                 }
@@ -61,6 +62,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                 setMessages(prev => [...prev, {
                     kind: 'text',
                     id: crypto.randomUUID(),
+                    role: 'assistant' as const,
                     content: `[Pocket AI] Failed to join session: ${err.error}\n`
                 }]);
                 setIsConnecting(false);
@@ -103,6 +105,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                         setMessages(prev => [...prev, {
                             kind: 'text',
                             id: crypto.randomUUID(),
+                            role: 'assistant' as const,
                             content: msg.text,
                         }]);
                     }
@@ -174,7 +177,8 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
         setMessages(prev => [...prev, {
             kind: 'text',
             id: crypto.randomUUID(),
-            content: text + '\n',
+            role: 'user' as const,
+            content: text,
         }]);
 
         try {
