@@ -1,0 +1,26 @@
+{
+  "name": "@pocket-ai/cli",
+  "version": "0.1.0",
+  "description": "AI CLI 래퍼 + 원격 제어 - pocket-ai start/remote/status/stop",
+  "type": "module",
+  "bin": {
+    "pocket-ai": "./bin/pocket-ai.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@pocket-ai/wire": "*",
+    "commander": "^12.0.0",
+    "node-pty": "^1.0.0",
+    "open": "^10.0.0",
+    "socket.io-client": "^4.7.0",
+    "chalk": "^5.3.0",
+    "conf": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}

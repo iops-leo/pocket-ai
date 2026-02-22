@@ -22,11 +22,12 @@
 ```
 pocket-ai/
 ├── apps/
-│   ├── server/      # 릴레이 서버
-│   └── pwa/         # PWA 클라이언트
+│   ├── server/      # Fastify + Socket.IO 릴레이 (순수 중계, 저장 없음)
+│   └── pwa/         # Next.js PWA 클라이언트
 ├── packages/
-│   ├── agent/       # PC CLI 래퍼
-│   └── shared/      # 공통 모듈
+│   ├── cli/         # AI CLI 래퍼 + 데몬 (PC 글로벌 설치)
+│   ├── agent/       # 원격 세션 제어 CLI
+│   └── wire/        # 공유 프로토콜, 타입, 암호화
 └── docs/            # 문서
 ```
 
@@ -43,8 +44,8 @@ pocket-ai/
 
 | 단계 | 기존 예상 | 변경 |
 |-----|---------|------|
-| 초기 | $20-50/월 | $0-5/월 |
-| 성장 | $100-200/월 | $50-150/월 |
+| 초기 | $20-50/월 | $0-3/월 (메시지 저장 없음) |
+| 성장 | $100-200/월 | $20-100/월 |
 | 대규모 | $500+/월 | $300+/월 |
 
 ---
@@ -121,17 +122,18 @@ pocket-ai/
 4. 동일한 키로 AES-256-GCM E2E 암호화
 - QR은 인증 수단이 아닌 디바이스 페어링 + 키 교환 수단
 
-### 3. Fly.io + PostgreSQL
+### 3. Fly.io + PostgreSQL (순수 릴레이)
 검증된 Happy 스타일 아키텍처:
 - Fly.io 무료 티어로 시작
 - PostgreSQL free tier로 처음부터 안정적인 DB
+- 메시지 저장 없음: DB는 users/sessions/devices만 (수백만 명도 무료 티어로 충분)
 - 필요시 Connection Pooling + Read Replicas로 확장
 
 ### 4. Freemium 비즈니스 모델
 ```
 FREE ($0)     → 개인 사용자 확보
-PRO ($9.99)   → 파워 유저 수익화
-TEAM ($49.99) → 기업 고객 진입
+PRO ($8.99)   → 멀티 디바이스(3대) + 무제한 세션
+TEAM ($39)    → 팀 공유 세션 + 권한 관리
 Enterprise    → 고가치 계약
 ```
 
@@ -156,10 +158,11 @@ Enterprise    → 고가치 계약
 ## 다음 단계
 
 1. **MVP 구현**
-   - [ ] apps/server 스캐폴딩
-   - [ ] apps/pwa 스캐폴딩
-   - [ ] packages/agent 구현
-   - [ ] packages/shared 구현
+   - [ ] PoC: node-pty + Claude Code + Socket.IO 스트리밍 (최우선)
+   - [ ] apps/server 스캐폴딩 (Fastify + Socket.IO)
+   - [ ] apps/pwa 스캐폴딩 (Next.js + QR 스캐너)
+   - [ ] packages/cli 구현 (AI CLI 래퍼 + 데몬)
+   - [ ] packages/wire 구현 (프로토콜 + AES-256-GCM)
 
 2. **테스트**
    - [ ] E2E 암호화 테스트
@@ -173,4 +176,4 @@ Enterprise    → 고가치 계약
 
 ---
 
-**문서 완료 일자**: 2024
+**최종 업데이트**: 2026-02-21 (순수 릴레이 아키텍처 반영)

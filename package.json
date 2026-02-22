@@ -1,0 +1,19 @@
+{
+  "name": "pocket-ai",
+  "version": "1.0.0",
+  "description": "**어디서든 PC의 AI CLI 세션을 이어서 사용하세요**",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

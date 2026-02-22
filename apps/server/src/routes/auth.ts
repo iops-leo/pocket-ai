@@ -1,0 +1,82 @@
+import { FastifyInstance } from 'fastify';
+import { db } from '../db/db.js';
+
+declare module 'fastify' {
+    interface FastifyInstance {
+        githubOAuth2: import('@fastify/oauth2').OAuth2Namespace;
+    }
+}
+
+export async function authRoutes(fastify: FastifyInstance) {
+
+    fastify.get('/github/callback', async (request, reply) => {
+        try {
+            const token = await fastify.githubOAuth2.getAccessTokenFromAuthorizationCodeFlow(request);
+
+            const userResponse = await fetch('https://api.github.com/user', {
+                headers: {
+                    Authorization: `Bearer ${token.token.access_token}`,
+                    Accept: 'application/vnd.github.v3+json'
+                }
+            });
+            const githubUser: any = await userResponse.json();
+
+            const emailsResponse = await fetch('https://api.github.com/user/emails', {
+                headers: {
+                    Authorization: `Bearer ${token.token.access_token}`,
+                    Accept: 'application/vnd.github.v3+json'
+                }
+            });
+            const githubEmails: any[] = await emailsResponse.json();
+            const primaryEmail = githubEmails.find(e => e.primary)?.email || githubEmails[0]?.email;
+
+            if (!primaryEmail) {
+                return reply.code(400).send({ error: 'GitHub account must have an email' });
+            }
+
+            const name = githubUser.name || githubUser.login;
+            const providerAccountId = githubUser.id.toString();
+
+            let user = await db.selectFrom('users').where('email', '=', primaryEmail).selectAll().executeTakeFirst();
+
+            if (!user) {
+                const result = await db.insertInto('users')
+                    .values({ email: primaryEmail, name })
+                    .returningAll()
+                    .executeTakeFirstOrThrow();
+                user = result;
+            } else {
+                await db.updateTable('users')
+                    .set({ last_login_at: new Date() })
+                    .where('id', '=', user.id)
+                    .execute();
+            }
+
+            const oauth = await db.selectFrom('oauth_accounts')
+                .where('provider', '=', 'github')
+                .where('provider_account_id', '=', providerAccountId)
+                .selectAll()
+                .executeTakeFirst();
+
+            if (!oauth) {
+                await db.insertInto('oauth_accounts')
+                    .values({
+                        user_id: user.id,
+                        provider: 'github',
+                        provider_account_id: providerAccountId
+                    })
+                    .execute();
+            }
+
+            const appToken = fastify.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' });
+
+            // Redirect back to the frontend with the token
+            const frontendUrl = process.env.PWA_URL || 'http://localhost:3002';
+            reply.redirect(`${frontendUrl}/login?token=${appToken}`);
+
+        } catch (err) {
+            fastify.log.error(err);
+            reply.code(500).send({ error: 'OAuth flow failed' });
+        }
+    });
+}
