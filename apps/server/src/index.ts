@@ -39,6 +39,7 @@ fastify.register(oauthPlugin, {
     },
     startRedirectPath: '/auth/github',
     callbackUri: process.env.GITHUB_CALLBACK_URL || 'http://localhost:3001/auth/github/callback',
+    scope: ['user:email'],
     // CLI 로그인 지원: cli_port 쿼리 파라미터를 state에 인코딩
     generateStateFunction: (request: any) => {
         const cliPort = request.query?.cli_port;
