@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Terminal as TerminalIcon, Cpu, Clock, LogOut, RefreshCw, Loader2 } from 'lucide-react';
+import { Terminal as TerminalIcon, Cpu, LogOut, RefreshCw, Loader2 } from 'lucide-react';
 import { TerminalChat } from '@/components/TerminalChat';
 
 interface Session {
@@ -51,7 +51,7 @@ export default function DashboardPage() {
             } else {
                 setError(data.error || 'Failed to fetch sessions');
             }
-        } catch (err) {
+        } catch {
             setError('서버에 연결할 수 없습니다');
         } finally {
             setIsLoading(false);
@@ -63,6 +63,7 @@ export default function DashboardPage() {
         // Poll every 10 seconds for session updates
         const interval = setInterval(fetchSessions, 10000);
         return () => clearInterval(interval);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleLogout = () => {
