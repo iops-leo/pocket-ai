@@ -8,6 +8,9 @@ dist/
 build/
 .next/
 out/
+# Exception: CLI dist must be committed so users get compiled JS without building
+!packages/cli/dist/
+!packages/cli/bin/
 
 # Environment
 .env
