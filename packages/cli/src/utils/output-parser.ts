@@ -29,14 +29,14 @@ const isTuiChrome = (line: string): boolean => {
 
     const firstChar = trimmed[0];
 
-    // Box-drawing border lines (startup screen)
-    if ('╭╮╰╯━═'.includes(firstChar)) return true;
+    // Box-drawing border lines (startup screen, tool output borders)
+    if ('╭╮╰╯━═│'.includes(firstChar)) return true;
 
     // Lines consisting entirely of ─ (common separator)
     if (/^─+$/.test(trimmed)) return true;
 
-    // OMC/HUD status bar: [TAG] | ... pattern
-    if (/^\[[\w-]+\]/.test(trimmed)) return true;
+    // OMC/HUD status bar: [TAG] | ... pattern (e.g. "[OMC] | 5h:72%...")
+    if (/^\[[\w-]+\]\s*[|│]/.test(trimmed)) return true;
 
     // Shell prompt: ❯, %, $
     if (firstChar === '❯' || firstChar === '%' || firstChar === '$') return true;
@@ -63,9 +63,9 @@ export class ClaudeOutputParser {
         this.lineBuffer = parts.pop() ?? '';
 
         for (const part of parts) {
-            // 1. Strip trailing \r from \r\n line endings (PTY always sends \r\n)
+            // 1. Strip ALL trailing \r — PTY sends \r\r\n (app writes \r\n, PTY OPOST adds \r)
             //    THEN handle inline \r updates (progress indicators: "50%\r100%")
-            const cleanPart = part.replace(/\r$/, '');
+            const cleanPart = part.replace(/\r+$/, '');
             const segments = cleanPart.split('\r');
             const finalSegment = segments[segments.length - 1];
             const clean = stripAnsi(finalSegment).trimEnd();
