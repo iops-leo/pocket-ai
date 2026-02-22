@@ -79,7 +79,6 @@ export default function DashboardPage() {
         const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
         const socket = io(serverUrl, {
-            path: '/v1/updates',
             auth: { token, role: 'pwa' },
             transports: ['websocket']
         });
@@ -90,19 +89,7 @@ export default function DashboardPage() {
             console.log('Real-time updates connected');
         });
 
-        socket.on('update-session', (updatedSession: Session) => {
-            setSessions(prev => {
-                const existing = prev.findIndex(s => s.sessionId === updatedSession.sessionId);
-                if (existing >= 0) {
-                    const newSessions = [...prev];
-                    newSessions[existing] = updatedSession;
-                    return newSessions;
-                }
-                return [...prev, updatedSession];
-            });
-        });
-
-        socket.on('session-offline', (sessionId: string) => {
+        socket.on('session-offline', ({ sessionId }: { sessionId: string }) => {
             setSessions(prev => prev.map(s =>
                 s.sessionId === sessionId ? { ...s, status: 'offline' } : s
             ));
