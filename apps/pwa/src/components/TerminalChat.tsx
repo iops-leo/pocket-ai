@@ -169,7 +169,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
         if (!inputValue.trim() || !socketRef.current || !sharedSecretRef.current || isDisconnected) return;
 
         try {
-            const msgStr = JSON.stringify({ t: 'text', text: inputValue + '\r' });
+            const msgStr = JSON.stringify({ t: 'text', text: inputValue + '\n' });
             const encryptedBody = await encrypt(msgStr, sharedSecretRef.current);
 
             socketRef.current.emit('update', {

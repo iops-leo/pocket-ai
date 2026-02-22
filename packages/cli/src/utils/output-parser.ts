@@ -11,22 +11,17 @@ const stripAnsi = (str: string) =>
         .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
         // CSI sequences: ESC [ params final (includes private ?/! modes)
         .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
-        // 2-char ESC sequences (save/restore cursor, charset, scroll, etc.)
-        // NOTE: exclude '[' (0x5B) to avoid consuming CSI introducer \x1b[
+        // 2-char ESC sequences — exclude '[' (0x5B) to avoid consuming CSI introducer
         .replace(/\x1b[\x20-\x5a\x5c-\x7e]/g, '')
         // C1 control codes (8-bit equivalents of ESC + Fe)
         .replace(/[\x80-\x9f]/g, '')
         // Remaining stray ESC
         .replace(/\x1b/g, '')
-        // Orphaned CSI fragments: if \x1b was stripped alone, [38;5;246m etc. remain
+        // Orphaned CSI fragments left after partial ESC strip (e.g. [38;5;246m, [?2026h)
         .replace(/\[[\d;?]+[A-Za-z]/g, '');
 
 /**
- * Detect lines that are terminal chrome, not meaningful chat content:
- * - Claude Code TUI startup screen (box borders, block chars)
- * - OMC/HUD status bar: [OMC] | 5h:11%...
- * - Shell prompt lines: ❯, %
- * - Pure separator lines: ─────, ━━━━━
+ * Detect lines that are terminal chrome, not meaningful chat content.
  */
 const isTuiChrome = (line: string): boolean => {
     const trimmed = line.trimStart();
@@ -58,6 +53,8 @@ export class ClaudeOutputParser {
     private lineBuffer = '';
     private currentToolId: string | null = null;
     private toolOutputLines: string[] = [];
+    /** Last streamed (non-\n) text emitted — for delta deduplication */
+    private lastStreamText = '';
 
     feed(rawChunk: string): SessionPayload[] {
         const events: SessionPayload[] = [];
@@ -74,6 +71,9 @@ export class ClaudeOutputParser {
             const clean = stripAnsi(finalSegment).trimEnd();
 
             if (!clean.trim()) continue;
+
+            // \n-terminated content resets the streaming cursor
+            this.lastStreamText = '';
 
             const toolMatch = clean.trimStart().match(TOOL_PATTERN);
 
@@ -121,10 +121,58 @@ export class ClaudeOutputParser {
             }
         }
 
+        // ── Streaming flush ──────────────────────────────────────────────────────
+        // Claude Code is a full-screen TUI: it renders with cursor addressing, not \n.
+        // We flush the lineBuffer when:
+        //   • "show cursor" ESC sequence appears (end of a TUI render frame)
+        //   • lineBuffer has grown large (safety threshold)
+        const renderComplete = rawChunk.includes('\x1b[?25h'); // show cursor
+        const bufferLarge   = this.lineBuffer.length > 300;
+
+        if ((renderComplete || bufferLarge) && this.lineBuffer && !this.currentToolId) {
+            const streamEvents = this.peekStreamBuffer();
+            events.push(...streamEvents);
+        }
+
         return events;
     }
 
+    /**
+     * Peek at the current lineBuffer content and emit any new streaming text.
+     * Does NOT clear lineBuffer (it will be cleared when \n eventually arrives).
+     * Uses delta encoding so duplicate content is never sent.
+     */
+    private peekStreamBuffer(): SessionPayload[] {
+        // Take the last \r-separated segment = the latest visible text
+        const rawSeg = this.lineBuffer.split('\r').pop() ?? '';
+        const clean  = stripAnsi(rawSeg).trimEnd();
+
+        if (!clean.trim() || isTuiChrome(clean)) return [];
+        if (clean.trimStart().match(TOOL_PATTERN)) return []; // handled on \n cycle
+
+        // Delta: only emit chars added since last peek
+        if (clean.startsWith(this.lastStreamText)) {
+            const delta = clean.slice(this.lastStreamText.length);
+            if (!delta.trim()) return [];
+            this.lastStreamText = clean;
+            return [{ t: 'text', text: delta }];
+        }
+
+        // New streaming line (content changed completely)
+        const prefix = this.lastStreamText ? '\n' : '';
+        this.lastStreamText = clean;
+        return [{ t: 'text', text: prefix + clean }];
+    }
+
     flush(): SessionPayload[] {
+        const events: SessionPayload[] = [];
+
+        // Emit any buffered streaming text
+        if (this.lineBuffer) {
+            events.push(...this.peekStreamBuffer());
+            this.lineBuffer = '';
+        }
+
         if (this.currentToolId) {
             const event: SessionPayload = {
                 t: 'tool-result',
@@ -133,8 +181,8 @@ export class ClaudeOutputParser {
             };
             this.currentToolId = null;
             this.toolOutputLines = [];
-            return [event];
+            events.push(event);
         }
-        return [];
+        return events;
     }
 }
