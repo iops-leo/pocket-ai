@@ -71,7 +71,14 @@ export class ClaudeSessionWatcher {
                 .sort((a, b) => b.mtime - a.mtime);
             if (candidates.length > 0) {
                 this.sessionFile = candidates[0].fp;
-                this.fileOffset = 0;
+                // Skip entries that existed BEFORE we started watching.
+                // fileOffset = 0 would re-send old local-CLI conversation history to PWA.
+                try {
+                    this.fileOffset = fs.statSync(candidates[0].fp).size;
+                }
+                catch {
+                    this.fileOffset = 0;
+                }
             }
         }
         catch { /* directory not created yet */ }
