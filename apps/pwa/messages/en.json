@@ -33,7 +33,7 @@
     "settings": "Settings",
     "sessionList": "Sessions",
     "searchPlaceholder": "Search hostname...",
-    "allEngines": "All Engines",
+    "allEngines": "All",
     "online": "Online",
     "offline": "Offline",
     "lastActivity": "Last activity",
@@ -41,7 +41,17 @@
     "unknown": "Unknown",
     "noSessions": "No active PC sessions",
     "noSessionsHint": "Run {command} in your PC terminal to connect.",
-    "cannotConnect": "Cannot connect to server"
+    "cannotConnect": "Cannot connect to server",
+    "newSession": "New Session",
+    "workingDirectory": "Working Directory",
+    "engine": "AI Engine",
+    "pathRequired": "Please enter a working directory",
+    "createFailed": "Failed to create session",
+    "creating": "Creating...",
+    "createSession": "Create Session",
+    "newSessionHint1": "You can also start a session directly from your PC terminal:",
+    "selectSession": "Select a Session",
+    "selectSessionHint": "Choose a session from the list on the left"
   },
   "settings": {
     "title": "Settings",

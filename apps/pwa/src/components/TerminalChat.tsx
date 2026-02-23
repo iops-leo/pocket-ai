@@ -10,9 +10,10 @@ import { useTranslations } from 'next-intl';
 interface TerminalChatProps {
     sessionId: string;
     onBack: () => void;
+    embedded?: boolean;
 }
 
-export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
+export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalChatProps) {
     const t = useTranslations('chat');
     const [isConnecting, setIsConnecting] = useState(true);
     const [isDisconnected, setIsDisconnected] = useState(false);
@@ -309,12 +310,15 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
     };
 
     return (
-        <div className="flex flex-col h-[100dvh] bg-gray-950 font-sans text-gray-100 overflow-hidden">
+        <div className={`flex flex-col ${embedded ? 'h-full' : 'h-[100dvh]'} bg-gray-950 font-sans text-gray-100 overflow-hidden`}>
             <header className="flex-none flex items-center justify-between p-3 border-b border-gray-800 bg-gray-900/80 backdrop-blur-md z-20">
                 <div className="flex items-center gap-3 min-w-0">
-                    <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-white flex-shrink-0">
-                        <ArrowLeft size={20} />
-                    </button>
+                    {/* Show back button only on mobile in embedded mode, always on standalone */}
+                    {(!embedded || true) && (
+                        <button onClick={onBack} className={`p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-white flex-shrink-0 ${embedded ? 'lg:hidden' : ''}`}>
+                            <ArrowLeft size={20} />
+                        </button>
+                    )}
                     <div className="min-w-0">
                         <h2 className="font-semibold text-sm md:text-base flex items-center gap-2 text-white">
                             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDisconnected ? 'bg-red-500' : isConnecting ? 'bg-yellow-500 animate-pulse' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'}`}></span>

@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Terminal as TerminalIcon, Cpu, RefreshCw, Loader2, Settings, Search, Wifi, WifiOff, MoreVertical } from 'lucide-react';
+import { Terminal, Loader2, Menu } from 'lucide-react';
 import { TerminalChat } from '@/components/TerminalChat';
-import { SessionDetailsModal } from '@/components/SessionDetailsModal';
+import { SessionSidebar } from '@/components/SessionSidebar';
+import { NewSessionModal } from '@/components/NewSessionModal';
 import { io, Socket } from 'socket.io-client';
-import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
 interface Session {
@@ -15,6 +15,7 @@ interface Session {
     metadata: {
         hostname?: string;
         engine?: string;
+        cwd?: string;
     };
     status: string;
     lastPing?: number;
@@ -23,20 +24,21 @@ interface Session {
 export default function DashboardPage() {
     const router = useRouter();
     const t = useTranslations('dashboard');
-    const tc = useTranslations('common');
     const [sessions, setSessions] = useState<Session[]>([]);
     const [activeSession, setActiveSession] = useState<string | null>(null);
-    const [selectedSessionForDetails, setSelectedSessionForDetails] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Search & Filter
-    const [searchQuery, setSearchQuery] = useState('');
-    const [engineFilter, setEngineFilter] = useState<string>('all');
+    // Sidebar state
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+    // New session modal
+    const [showNewSessionModal, setShowNewSessionModal] = useState(false);
 
     const socketRef = useRef<Socket | null>(null);
 
-    const fetchSessions = async (showLoader = true) => {
+    const fetchSessions = useCallback(async (showLoader = true) => {
         const token = localStorage.getItem('pocket_ai_token');
         if (!token) {
             router.replace('/login');
@@ -71,7 +73,7 @@ export default function DashboardPage() {
         } finally {
             if (showLoader) setIsLoading(false);
         }
-    };
+    }, [router, t]);
 
     useEffect(() => {
         fetchSessions(true);
@@ -98,160 +100,135 @@ export default function DashboardPage() {
             ));
         });
 
+        socket.on('session-online', ({ sessionId }: { sessionId: string }) => {
+            setSessions(prev => prev.map(s =>
+                s.sessionId === sessionId ? { ...s, status: 'online' } : s
+            ));
+            // Also refresh to get updated metadata
+            fetchSessions(false);
+        });
+
         return () => {
             socket.disconnect();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [fetchSessions]);
 
-    const filteredSessions = sessions.filter(session => {
-        const matchesSearch = session.metadata?.hostname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            session.sessionId.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesEngine = engineFilter === 'all' || session.metadata?.engine?.toLowerCase() === engineFilter.toLowerCase();
-        return matchesSearch && matchesEngine;
-    });
+    const handleSelectSession = (sessionId: string) => {
+        setActiveSession(sessionId);
+        setIsMobileSidebarOpen(false); // Close mobile sidebar when selecting
+    };
 
-    if (activeSession) {
-        return <TerminalChat sessionId={activeSession} onBack={() => setActiveSession(null)} />;
+    const handleNewSession = async (data: { cwd: string; engine: string }) => {
+        // Note: This creates a placeholder - actual session creation happens on the PC
+        // For now, show a hint to the user
+        console.log('New session request:', data);
+        // In a real implementation, this would send a notification to the PC daemon
+        // For now, just close the modal
+    };
+
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="h-screen bg-gray-950 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+            </div>
+        );
+    }
+
+    // Error state
+    if (error && sessions.length === 0) {
+        return (
+            <div className="h-screen bg-gray-950 flex items-center justify-center p-6">
+                <div className="text-center">
+                    <p className="text-red-400 mb-4">{error}</p>
+                    <button
+                        onClick={() => fetchSessions(true)}
+                        className="text-sm text-blue-400 hover:text-blue-300 underline"
+                    >
+                        {t('refresh')}
+                    </button>
+                </div>
+            </div>
+        );
     }
 
     return (
-        <div className="min-h-screen bg-gray-950 font-sans text-gray-100 p-6 md:p-12">
-            <header className="max-w-4xl mx-auto flex justify-between items-center mb-8">
-                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
-                    Pocket AI
-                </h1>
-                <div className="flex items-center gap-2">
+        <div className="h-screen bg-gray-950 flex overflow-hidden">
+            {/* Mobile sidebar overlay */}
+            {isMobileSidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+                    onClick={() => setIsMobileSidebarOpen(false)}
+                />
+            )}
+
+            {/* Sidebar - desktop always visible, mobile slide-in */}
+            <div className={`
+                fixed lg:relative inset-y-0 left-0 z-50
+                transform transition-transform duration-300 ease-in-out
+                lg:transform-none
+                ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+            `}>
+                <SessionSidebar
+                    sessions={sessions}
+                    activeSessionId={activeSession}
+                    onSelectSession={handleSelectSession}
+                    onNewSession={() => setShowNewSessionModal(true)}
+                    isCollapsed={isSidebarCollapsed}
+                    onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                />
+            </div>
+
+            {/* Main content area */}
+            <div className="flex-1 flex flex-col min-w-0">
+                {/* Mobile header - only visible on mobile */}
+                <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-800 bg-gray-900">
                     <button
-                        onClick={() => fetchSessions(true)}
-                        className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-gray-800 transition-colors"
-                        title={t('refresh')}
+                        onClick={() => setIsMobileSidebarOpen(true)}
+                        className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
                     >
-                        <RefreshCw size={18} />
+                        <Menu size={24} />
                     </button>
-                    <Link
-                        href="/settings"
-                        className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-gray-800 transition-colors"
-                        title={t('settings')}
-                    >
-                        <Settings size={20} />
-                    </Link>
-                </div>
-            </header>
-
-            <main className="max-w-4xl mx-auto">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-                    <h2 className="text-xl font-semibold flex items-center gap-2">
-                        <TerminalIcon className="text-blue-400" /> {t('sessionList')}
-                    </h2>
-
-                    {/* Filter & Search */}
-                    <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-                            <input
-                                type="text"
-                                placeholder={t('searchPlaceholder')}
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full sm:w-64 pl-10 pr-4 py-2 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
-                            />
-                        </div>
-                        <select
-                            value={engineFilter}
-                            onChange={(e) => setEngineFilter(e.target.value)}
-                            className="w-full sm:w-auto px-4 py-2 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-300 focus:outline-none focus:border-blue-500 transition-all"
-                        >
-                            <option value="all">{t('allEngines')}</option>
-                            <option value="claude">Claude</option>
-                            <option value="gemini">Gemini</option>
-                        </select>
-                    </div>
+                    <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+                        Pocket AI
+                    </h1>
+                    <div className="w-10" /> {/* Spacer for centering */}
                 </div>
 
-                {isLoading ? (
-                    <div className="flex items-center justify-center p-12">
-                        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-                    </div>
-                ) : error ? (
-                    <div className="text-center p-12 border border-dashed border-red-800/50 rounded-2xl bg-red-900/10">
-                        <p className="text-red-400">{error}</p>
-                        <button
-                            onClick={() => fetchSessions(true)}
-                            className="mt-4 text-sm text-gray-400 hover:text-white underline"
-                        >
-                            {tc('retry')}
-                        </button>
-                    </div>
-                ) : filteredSessions.length > 0 ? (
-                    <div className="grid gap-4 md:grid-cols-2">
-                        {filteredSessions.map((session) => {
-                            const isOnline = session.status === 'online';
-                            return (
-                                <div
-                                    key={session.sessionId}
-                                    className="p-5 rounded-2xl border bg-gray-900 border-gray-800 hover:border-blue-600/50 cursor-pointer shadow-lg hover:shadow-blue-900/10 transition-all duration-200 group relative overflow-hidden flex flex-col justify-between"
-                                >
-                                    <div className={`absolute top-0 left-0 w-1 h-full transition-colors ${isOnline ? 'bg-emerald-500' : 'bg-gray-600'}`} />
-
-                                    <div className="flex justify-between items-start mb-4 relative z-10" onClick={() => isOnline && setActiveSession(session.sessionId)}>
-                                        <div>
-                                            <h3 className="font-medium text-lg text-white font-mono flex items-center gap-2">
-                                                {session.metadata?.hostname || 'Unknown Host'}
-                                            </h3>
-                                            <div className="flex items-center gap-1.5 mt-1 text-sm text-gray-500">
-                                                <Cpu size={14} /> {session.metadata?.engine || 'claude'}
-                                                <span className="mx-1">•</span>
-                                                <span className="font-mono text-xs">{session.sessionId.slice(0, 8)}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-col items-end gap-2">
-                                            <span className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full font-medium border ${isOnline
-                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                                : 'bg-gray-800 text-gray-400 border-gray-700'
-                                                }`}>
-                                                {isOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
-                                                {isOnline ? t('online') : t('offline')}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div className="pt-4 mt-auto border-t border-gray-800/50 flex justify-between items-center text-xs text-gray-500">
-                                        <span>{t('lastActivity')}: {isOnline ? t('justNow') : t('unknown')}</span>
-                                        <button
-                                            className="p-1.5 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setSelectedSessionForDetails(session);
-                                            }}
-                                        >
-                                            <MoreVertical size={16} />
-                                        </button>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                {/* Chat area or empty state */}
+                {activeSession ? (
+                    <TerminalChat
+                        sessionId={activeSession}
+                        onBack={() => setActiveSession(null)}
+                        embedded={true}
+                    />
                 ) : (
-                    <div className="text-center p-16 border border-dashed border-gray-800 rounded-2xl bg-gray-900/30 flex flex-col items-center">
-                        <TerminalIcon size={40} className="text-gray-700 mb-4" />
-                        <p className="text-gray-400 text-lg mb-2">{t('noSessions')}</p>
-                        <p className="text-sm text-gray-500">
-                            {t('noSessionsHint', { command: 'pocket-ai' })}
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-8">
+                        <div className="w-16 h-16 rounded-2xl bg-gray-800/50 flex items-center justify-center border border-gray-700/40 mb-6">
+                            <Terminal size={28} className="text-gray-500" />
+                        </div>
+                        <h2 className="text-xl font-semibold text-gray-300 mb-2">{t('selectSession')}</h2>
+                        <p className="text-sm text-gray-500 text-center max-w-sm">
+                            {t('selectSessionHint')}
                         </p>
+
+                        {sessions.length === 0 && (
+                            <div className="mt-8 p-6 bg-gray-900/50 border border-gray-800 rounded-xl max-w-md text-center">
+                                <p className="text-gray-400 text-sm mb-2">{t('noSessions')}</p>
+                                <p className="text-gray-500 text-xs font-mono">
+                                    {t('noSessionsHint', { command: 'pocket-ai' })}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
-            </main>
+            </div>
 
-            {selectedSessionForDetails && (
-                <SessionDetailsModal
-                    session={selectedSessionForDetails}
-                    onClose={() => setSelectedSessionForDetails(null)}
-                    onConnect={() => {
-                        setActiveSession(selectedSessionForDetails.sessionId);
-                        setSelectedSessionForDetails(null);
-                    }}
+            {/* New Session Modal */}
+            {showNewSessionModal && (
+                <NewSessionModal
+                    onClose={() => setShowNewSessionModal(false)}
+                    onSubmit={handleNewSession}
                 />
             )}
         </div>
