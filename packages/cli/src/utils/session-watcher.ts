@@ -163,4 +163,60 @@ export class ClaudeSessionWatcher {
             this.pollTimeout = null;
         }
     }
+
+    /**
+     * Read recent history from JSONL file (for PWA history restore).
+     * Returns events from the BEGINNING of the file (not just new entries).
+     * @param limit Maximum number of events to return
+     */
+    readHistory(limit: number = 50): SessionPayload[] {
+        if (!this.sessionFile) return [];
+
+        const events: SessionPayload[] = [];
+        try {
+            const content = fs.readFileSync(this.sessionFile, 'utf-8');
+            const lines = content.split('\n').filter(line => line.trim());
+
+            for (const line of lines) {
+                if (events.length >= limit) break;
+
+                let entry: any;
+                try { entry = JSON.parse(line); } catch { continue; }
+                if (!entry || typeof entry !== 'object') continue;
+
+                // AI response: text blocks + tool_use blocks
+                if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
+                    for (const block of entry.message.content) {
+                        if (events.length >= limit) break;
+                        if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+                            events.push({ t: 'text', text: block.text });
+                        } else if (block.type === 'tool_use') {
+                            const args = block.input != null ? JSON.stringify(block.input) : '';
+                            events.push({ t: 'tool-call', id: block.id, name: block.name, arguments: args });
+                        }
+                    }
+                }
+
+                // Tool results: user-turn tool_result blocks
+                if (entry.type === 'user' && Array.isArray(entry.message?.content)) {
+                    for (const block of entry.message.content) {
+                        if (events.length >= limit) break;
+                        if (block.type === 'tool_result') {
+                            const result = typeof block.content === 'string'
+                                ? block.content
+                                : Array.isArray(block.content)
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    ? block.content.map((c: any) => (typeof c.text === 'string' ? c.text : '')).join('\n')
+                                    : '';
+                            events.push({ t: 'tool-result', id: block.tool_use_id, result });
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            // File not found or read error - return empty
+        }
+
+        return events;
+    }
 }

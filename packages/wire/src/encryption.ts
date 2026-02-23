@@ -77,6 +77,32 @@ export async function importPublicKey(base64Key: string): Promise<CryptoKey> {
 }
 
 /**
+ * Exports a private key to PKCS8 format as base64 string.
+ * Used for persisting the CLI's private key to enable message history decryption.
+ */
+export async function exportPrivateKey(key: CryptoKey): Promise<string> {
+    const exported = await globalThis.crypto.subtle.exportKey('pkcs8', key);
+    return Buffer.from(exported).toString('base64');
+}
+
+/**
+ * Imports a base64 encoded private key (PKCS8 format) back to a CryptoKey.
+ */
+export async function importPrivateKey(base64Key: string): Promise<CryptoKey> {
+    const der = Buffer.from(base64Key, 'base64');
+    return await globalThis.crypto.subtle.importKey(
+        'pkcs8',
+        der,
+        {
+            name: 'ECDH',
+            namedCurve: 'P-256',
+        },
+        true,
+        ['deriveKey', 'deriveBits']
+    );
+}
+
+/**
  * Encrypts a plaintext string using AES-256-GCM.
  */
 export async function encrypt(plaintext: string, key: CryptoKey): Promise<EncryptedData> {

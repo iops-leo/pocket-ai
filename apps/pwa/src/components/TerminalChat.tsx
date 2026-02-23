@@ -28,7 +28,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const socketRef = useRef<Socket | null>(null);
     const lastSeqRef = useRef<number | undefined>(undefined);
 
-    // 메시지 이력 로드 (암호화된 메시지 복호화)
+    // 메시지 이력 로드 (Happy 방식: 서버 DB에서 암호화된 메시지 조회 → 동일 키로 복호화)
     const loadMessageHistory = useCallback(async (sharedSecret: CryptoKey) => {
         const token = localStorage.getItem('pocket_ai_token');
         if (!token || historyLoaded) return;
@@ -45,7 +45,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
             const json = await res.json();
             const data = json.data as MessagesResponse;
 
-            // 암호화된 메시지 복호화
+            // 암호화된 메시지 복호화 (Happy 방식: CLI가 동일 키 유지)
             const decryptedMessages: ChatMessage[] = [];
             for (const msg of data.messages) {
                 try {
@@ -69,9 +69,9 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                             status: 'done',
                         });
                     }
-                    // tool-result는 기존 tool-call 업데이트로 처리되므로 별도 추가 안함
-                } catch (e) {
-                    console.warn('Failed to decrypt message:', msg.id, e);
+                } catch {
+                    // 복호화 실패 = 키 불일치 (새 세션이거나 키가 변경됨)
+                    console.debug('Skipping message with different key:', msg.id);
                 }
             }
 
@@ -114,7 +114,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                         setSessionMeta(data.metadata);
                     }
 
-                    // E2E 키 교환 완료 후 메시지 이력 로드
+                    // E2E 키 교환 완료 후 서버에서 이력 로드 (Happy 방식: 동일 키로 복호화)
                     loadMessageHistory(sharedSecretRef.current);
 
                     setIsConnecting(false);
@@ -144,7 +144,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         } catch (err) {
             console.error(err);
         }
-    }, [sessionId]);
+    }, [sessionId, loadMessageHistory]);
 
     useEffect(() => {
         const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -212,7 +212,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         return () => {
             socket.disconnect();
         };
-    }, [sessionId, initConnection, loadMessageHistory]);
+    }, [sessionId, initConnection]);
 
     // 세션 변경 시 상태 초기화
     useEffect(() => {
