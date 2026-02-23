@@ -247,6 +247,35 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
         }
     };
 
+    // 옵션 선택 시 해당 텍스트를 메시지로 전송
+    const handleOptionSelect = useCallback(async (option: string) => {
+        if (!socketRef.current || !sharedSecretRef.current || isDisconnected) return;
+
+        // Show sent message immediately in chat
+        setIsAiThinking(true);
+        setMessages(prev => [...prev, {
+            kind: 'text',
+            id: crypto.randomUUID(),
+            role: 'user' as const,
+            content: option,
+            timestamp: Date.now(),
+        }]);
+
+        try {
+            const msgStr = JSON.stringify({ t: 'text', text: option + '\r' });
+            const encryptedBody = await encrypt(msgStr, sharedSecretRef.current);
+
+            socketRef.current.emit('update', {
+                t: 'encrypted',
+                sessionId,
+                sender: 'pwa',
+                body: encryptedBody
+            });
+        } catch (err) {
+            console.error('Failed to send option', err);
+        }
+    }, [isDisconnected, sessionId]);
+
     const handleSend = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         if (!inputValue.trim() || !socketRef.current || !sharedSecretRef.current || isDisconnected) return;
@@ -356,7 +385,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                     </div>
                 )}
 
-                <MessageList messages={messages} isAiThinking={isAiThinking} />
+                <MessageList messages={messages} isAiThinking={isAiThinking} onOptionSelect={handleOptionSelect} />
 
                 {/* Input bar */}
                 <div className="flex-none bg-gray-950 w-full border-t border-gray-800/60">

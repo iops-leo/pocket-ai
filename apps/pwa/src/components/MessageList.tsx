@@ -72,9 +72,10 @@ function EmptyState() {
 interface MessageListProps {
     messages: ChatMessage[];
     isAiThinking?: boolean;
+    onOptionSelect?: (option: string) => void;
 }
 
-export function MessageList({ messages, isAiThinking }: MessageListProps) {
+export function MessageList({ messages, isAiThinking, onOptionSelect }: MessageListProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -132,7 +133,7 @@ export function MessageList({ messages, isAiThinking }: MessageListProps) {
                             <div key={msg.id} className="flex justify-start">
                                 <div className="max-w-[95%] w-full">
                                     <div className="bg-gray-800/80 border border-gray-700/50 text-gray-100 rounded-2xl rounded-bl-md px-4 py-2.5 text-[13px] leading-relaxed shadow-sm overflow-hidden">
-                                        <MarkdownRenderer content={msg.content.trimEnd()} />
+                                        <MarkdownRenderer content={msg.content.trimEnd()} onOptionSelect={onOptionSelect} />
                                     </div>
                                     <div className="flex items-center gap-2 mt-0.5 pl-1">
                                         {msg.timestamp && (

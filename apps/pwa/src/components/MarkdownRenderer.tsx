@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Prism from 'prismjs';
@@ -22,6 +22,66 @@ import { useTranslations } from 'next-intl';
 
 interface MarkdownRendererProps {
     content: string;
+    onOptionSelect?: (option: string) => void;
+}
+
+type ContentBlock =
+    | { type: 'markdown'; content: string }
+    | { type: 'options'; items: string[] };
+
+/**
+ * Parse content to extract <options> blocks
+ * Happy uses this format for user choices:
+ * <options>
+ *   <option>Choice 1</option>
+ *   <option>Choice 2</option>
+ * </options>
+ */
+function parseContent(content: string): ContentBlock[] {
+    const blocks: ContentBlock[] = [];
+    const optionsRegex = /<options>\s*([\s\S]*?)\s*<\/options>/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = optionsRegex.exec(content)) !== null) {
+        // Add markdown content before options block
+        if (match.index > lastIndex) {
+            const mdContent = content.slice(lastIndex, match.index).trim();
+            if (mdContent) {
+                blocks.push({ type: 'markdown', content: mdContent });
+            }
+        }
+
+        // Parse option items
+        const optionsContent = match[1];
+        const optionRegex = /<option>([\s\S]*?)<\/option>/g;
+        const items: string[] = [];
+        let optionMatch;
+        while ((optionMatch = optionRegex.exec(optionsContent)) !== null) {
+            items.push(optionMatch[1].trim());
+        }
+
+        if (items.length > 0) {
+            blocks.push({ type: 'options', items });
+        }
+
+        lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining markdown content
+    if (lastIndex < content.length) {
+        const mdContent = content.slice(lastIndex).trim();
+        if (mdContent) {
+            blocks.push({ type: 'markdown', content: mdContent });
+        }
+    }
+
+    // If no options found, return content as single markdown block
+    if (blocks.length === 0) {
+        blocks.push({ type: 'markdown', content });
+    }
+
+    return blocks;
 }
 
 function CopyCodeButton({ code }: { code: string }) {
@@ -49,7 +109,28 @@ function CopyCodeButton({ code }: { code: string }) {
     );
 }
 
-export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+function OptionsBlock({ items, onSelect }: { items: string[]; onSelect?: (option: string) => void }) {
+    return (
+        <div className="flex flex-wrap gap-2 my-3">
+            {items.map((item, index) => (
+                <button
+                    key={index}
+                    onClick={() => onSelect?.(item)}
+                    disabled={!onSelect}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all border
+                        ${onSelect
+                            ? 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700 hover:border-gray-500 active:scale-95 cursor-pointer'
+                            : 'bg-gray-800/50 border-gray-700 text-gray-400 cursor-default'
+                        }`}
+                >
+                    {item}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+function MarkdownBlock({ content }: { content: string }) {
     useEffect(() => {
         Prism.highlightAll();
     }, [content]);
@@ -173,5 +254,20 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         >
             {content}
         </ReactMarkdown>
+    );
+}
+
+export function MarkdownRenderer({ content, onOptionSelect }: MarkdownRendererProps) {
+    const blocks = useMemo(() => parseContent(content), [content]);
+
+    return (
+        <div>
+            {blocks.map((block, index) => {
+                if (block.type === 'options') {
+                    return <OptionsBlock key={index} items={block.items} onSelect={onOptionSelect} />;
+                }
+                return <MarkdownBlock key={index} content={block.content} />;
+            })}
+        </div>
     );
 }
