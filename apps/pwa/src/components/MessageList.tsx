@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Copy, Check, ArrowDown, Zap } from 'lucide-react';
 import { ToolCard } from './ToolCard';
+import { MarkdownRenderer } from './MarkdownRenderer';
 import { useTranslations } from 'next-intl';
 
 type TextMsg = { kind: 'text'; id: string; content: string; role: 'user' | 'assistant'; timestamp?: number };
@@ -126,12 +127,12 @@ export function MessageList({ messages, isAiThinking }: MessageListProps) {
                                 </div>
                             );
                         }
-                        // assistant
+                        // assistant - render markdown with code highlighting
                         return (
                             <div key={msg.id} className="flex justify-start">
-                                <div className="max-w-[90%]">
-                                    <div className="bg-gray-800/80 border border-gray-700/50 text-gray-100 rounded-2xl rounded-bl-md px-4 py-2.5 text-[13px] font-mono leading-relaxed shadow-sm">
-                                        <p className="whitespace-pre-wrap break-words">{msg.content.trimEnd()}</p>
+                                <div className="max-w-[95%] w-full">
+                                    <div className="bg-gray-800/80 border border-gray-700/50 text-gray-100 rounded-2xl rounded-bl-md px-4 py-2.5 text-[13px] leading-relaxed shadow-sm overflow-hidden">
+                                        <MarkdownRenderer content={msg.content.trimEnd()} />
                                     </div>
                                     <div className="flex items-center gap-2 mt-0.5 pl-1">
                                         {msg.timestamp && (
