@@ -7,6 +7,7 @@ import { TerminalChat } from '@/components/TerminalChat';
 import { SessionDetailsModal } from '@/components/SessionDetailsModal';
 import { io, Socket } from 'socket.io-client';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 
 interface Session {
     sessionId: string;
@@ -21,6 +22,8 @@ interface Session {
 
 export default function DashboardPage() {
     const router = useRouter();
+    const t = useTranslations('dashboard');
+    const tc = useTranslations('common');
     const [sessions, setSessions] = useState<Session[]>([]);
     const [activeSession, setActiveSession] = useState<string | null>(null);
     const [selectedSessionForDetails, setSelectedSessionForDetails] = useState<Session | null>(null);
@@ -64,7 +67,7 @@ export default function DashboardPage() {
                 setError(data.error || 'Failed to fetch sessions');
             }
         } catch {
-            setError('서버에 연결할 수 없습니다');
+            setError(t('cannotConnect'));
         } finally {
             if (showLoader) setIsLoading(false);
         }
@@ -122,14 +125,14 @@ export default function DashboardPage() {
                     <button
                         onClick={() => fetchSessions(true)}
                         className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-gray-800 transition-colors"
-                        title="새로고침"
+                        title={t('refresh')}
                     >
                         <RefreshCw size={18} />
                     </button>
                     <Link
                         href="/settings"
                         className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-gray-800 transition-colors"
-                        title="설정"
+                        title={t('settings')}
                     >
                         <Settings size={20} />
                     </Link>
@@ -139,7 +142,7 @@ export default function DashboardPage() {
             <main className="max-w-4xl mx-auto">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <h2 className="text-xl font-semibold flex items-center gap-2">
-                        <TerminalIcon className="text-blue-400" /> 세션 목록
+                        <TerminalIcon className="text-blue-400" /> {t('sessionList')}
                     </h2>
 
                     {/* Filter & Search */}
@@ -148,7 +151,7 @@ export default function DashboardPage() {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
                             <input
                                 type="text"
-                                placeholder="호스트명 검색..."
+                                placeholder={t('searchPlaceholder')}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full sm:w-64 pl-10 pr-4 py-2 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
@@ -159,7 +162,7 @@ export default function DashboardPage() {
                             onChange={(e) => setEngineFilter(e.target.value)}
                             className="w-full sm:w-auto px-4 py-2 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-300 focus:outline-none focus:border-blue-500 transition-all"
                         >
-                            <option value="all">모든 엔진</option>
+                            <option value="all">{t('allEngines')}</option>
                             <option value="claude">Claude</option>
                             <option value="gemini">Gemini</option>
                         </select>
@@ -177,7 +180,7 @@ export default function DashboardPage() {
                             onClick={() => fetchSessions(true)}
                             className="mt-4 text-sm text-gray-400 hover:text-white underline"
                         >
-                            다시 시도
+                            {tc('retry')}
                         </button>
                     </div>
                 ) : filteredSessions.length > 0 ? (
@@ -209,13 +212,13 @@ export default function DashboardPage() {
                                                 : 'bg-gray-800 text-gray-400 border-gray-700'
                                                 }`}>
                                                 {isOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
-                                                {isOnline ? 'Online' : 'Offline'}
+                                                {isOnline ? t('online') : t('offline')}
                                             </span>
                                         </div>
                                     </div>
 
                                     <div className="pt-4 mt-auto border-t border-gray-800/50 flex justify-between items-center text-xs text-gray-500">
-                                        <span>마지막 활동: {isOnline ? '방금 전' : '알 수 없음'}</span>
+                                        <span>{t('lastActivity')}: {isOnline ? t('justNow') : t('unknown')}</span>
                                         <button
                                             className="p-1.5 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
                                             onClick={(e) => {
@@ -233,9 +236,9 @@ export default function DashboardPage() {
                 ) : (
                     <div className="text-center p-16 border border-dashed border-gray-800 rounded-2xl bg-gray-900/30 flex flex-col items-center">
                         <TerminalIcon size={40} className="text-gray-700 mb-4" />
-                        <p className="text-gray-400 text-lg mb-2">활성화된 PC 세션이 없습니다</p>
+                        <p className="text-gray-400 text-lg mb-2">{t('noSessions')}</p>
                         <p className="text-sm text-gray-500">
-                            PC 터미널에서 <code className="bg-gray-800 text-gray-300 px-1.5 py-0.5 rounded font-mono text-xs">pocket-ai</code>를 실행하여 연결하세요.
+                            {t('noSessionsHint', { command: 'pocket-ai' })}
                         </p>
                     </div>
                 )}

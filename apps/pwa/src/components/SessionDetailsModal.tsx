@@ -2,6 +2,7 @@
 
 import { X, Copy, Check, Terminal, Cpu, Clock, Wifi, Key } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 interface Session {
     sessionId: string;
@@ -20,6 +21,9 @@ interface SessionDetailsModalProps {
 }
 
 export function SessionDetailsModal({ session, onClose, onConnect }: SessionDetailsModalProps) {
+    const t = useTranslations('sessionDetails');
+    const tc = useTranslations('common');
+    const td = useTranslations('dashboard');
     const [copiedField, setCopiedField] = useState<string | null>(null);
 
     const handleCopy = async (text: string, field: string) => {
@@ -43,7 +47,7 @@ export function SessionDetailsModal({ session, onClose, onConnect }: SessionDeta
                     <button
                         onClick={() => handleCopy(value, label)}
                         className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors"
-                        title="복사"
+                        title={tc('copy')}
                     >
                         {copiedField === label ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                     </button>
@@ -58,7 +62,7 @@ export function SessionDetailsModal({ session, onClose, onConnect }: SessionDeta
                 <div className="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-950/50">
                     <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                         <Terminal size={18} className="text-blue-400" />
-                        세션 상세 정보
+                        {t('title')}
                     </h2>
                     <button
                         onClick={onClose}
@@ -80,16 +84,16 @@ export function SessionDetailsModal({ session, onClose, onConnect }: SessionDeta
                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                             : 'bg-gray-800 text-gray-400 border-gray-700'
                             }`}>
-                            {session.status === 'online' ? '온라인 연결됨' : '오프라인'}
+                            {session.status === 'online' ? td('online') : td('offline')}
                         </span>
                     </div>
 
                     <div className="space-y-1">
-                        <InfoRow label="세션 ID" value={session.sessionId} copyable icon={Key} />
-                        <InfoRow label="AI 엔진" value={session.metadata?.engine || 'claude'} icon={Cpu} />
-                        <InfoRow label="공개 키" value={session.publicKey ? session.publicKey.substring(0, 32) + '...' : 'N/A'} copyable icon={Key} />
-                        <InfoRow label="상태" value={session.status} icon={Wifi} />
-                        <InfoRow label="마지막 활성화" value="방금 전" icon={Clock} />
+                        <InfoRow label={t('sessionId')} value={session.sessionId} copyable icon={Key} />
+                        <InfoRow label={t('engine')} value={session.metadata?.engine || 'claude'} icon={Cpu} />
+                        <InfoRow label={t('hostname')} value={session.metadata?.hostname || 'Unknown'} icon={Terminal} />
+                        <InfoRow label={t('status')} value={session.status === 'online' ? td('online') : td('offline')} icon={Wifi} />
+                        <InfoRow label={td('lastActivity')} value={session.status === 'online' ? td('justNow') : td('unknown')} icon={Clock} />
                     </div>
                 </div>
 
@@ -98,7 +102,7 @@ export function SessionDetailsModal({ session, onClose, onConnect }: SessionDeta
                         onClick={onClose}
                         className="flex-1 py-2.5 px-4 rounded-xl border border-gray-700 hover:bg-gray-800 text-gray-300 font-medium transition-colors"
                     >
-                        닫기
+                        {t('close')}
                     </button>
                     {session.status === 'online' && (
                         <button
@@ -106,7 +110,7 @@ export function SessionDetailsModal({ session, onClose, onConnect }: SessionDeta
                             className="flex-1 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors shadow-lg shadow-blue-900/20 flex justify-center items-center gap-2"
                         >
                             <Terminal size={18} />
-                            터미널 연결
+                            {t('connect')}
                         </button>
                     )}
                 </div>

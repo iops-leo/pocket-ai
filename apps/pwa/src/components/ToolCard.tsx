@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Terminal, FileText, Search, Globe, Wrench, ChevronDown, ChevronRight, Loader2, Check, X, Copy, type LucideIcon } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 type ToolStatus = 'running' | 'done' | 'error';
 
@@ -22,6 +23,8 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
 export function ToolCard({ name, args, output, status, error }: ToolCardProps) {
     const [expanded, setExpanded] = useState(false);
     const [copied, setCopied] = useState(false);
+    const t = useTranslations('common');
+    const tc = useTranslations('chat');
     const Icon = TOOL_ICONS[name] ?? Wrench;
     const hasOutput = (output && output.trim()) || error;
 
@@ -58,10 +61,10 @@ export function ToolCard({ name, args, output, status, error }: ToolCardProps) {
                                 } catch { /* clipboard not available */ }
                             }}
                             className="inline-flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
-                            title="출력 복사"
+                            title={tc('copyMessage')}
                         >
                             {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                            {copied ? '복사됨' : '복사'}
+                            {copied ? t('copied') : t('copy')}
                         </button>
                     </div>
                     <pre className="text-xs text-gray-400 font-mono whitespace-pre-wrap break-all px-3 pb-2">

@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import { NextIntlClientProvider } from 'next-intl';
+import { getLocale, getMessages } from 'next-intl/server';
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -16,7 +18,7 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: "Pocket AI",
-  description: "어디서든 PC의 AI CLI 세션을 이어서 사용하세요",
+  description: "Control your PC's AI CLI session from anywhere",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -33,18 +35,23 @@ export const viewport: Viewport = {
   themeColor: "#030712",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="ko">
+    <html lang={locale}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ServiceWorkerRegistration />
-        {children}
+        <NextIntlClientProvider messages={messages}>
+          <ServiceWorkerRegistration />
+          {children}
+        </NextIntlClientProvider>
       </body>
     </html>
   );

@@ -5,6 +5,7 @@ import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, ArrowUp, History } from 'l
 import { io, Socket } from 'socket.io-client';
 import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt, type MessagesResponse } from '@pocket-ai/wire';
 import { MessageList, type ChatMessage } from './MessageList';
+import { useTranslations } from 'next-intl';
 
 interface TerminalChatProps {
     sessionId: string;
@@ -12,6 +13,7 @@ interface TerminalChatProps {
 }
 
 export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
+    const t = useTranslations('chat');
     const [isConnecting, setIsConnecting] = useState(true);
     const [isDisconnected, setIsDisconnected] = useState(false);
     const [inputValue, setInputValue] = useState('');
@@ -293,7 +295,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                                     : sessionId.split('-')[0]}
                             </span>
                             <span className="hidden sm:inline text-gray-400 font-normal text-xs">
-                                ({isDisconnected ? '연결 끊김' : isConnecting ? '연결 중' : '보안 연결됨'})
+                                ({isDisconnected ? t('disconnected') : isConnecting ? t('connecting') : t('connected')})
                             </span>
                         </h2>
                         {sessionMeta.cwd && (
@@ -309,10 +311,10 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                         <button
                             onClick={handlePaste}
                             className="px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors border border-gray-700 hover:border-gray-600"
-                            title="클립보드 붙여넣기"
+                            title={t('clipboardPaste')}
                         >
                             <ClipboardPaste size={14} />
-                            <span className="hidden sm:inline">붙여넣기</span>
+                            <span className="hidden sm:inline">{t('paste')}</span>
                         </button>
                     )}
                 </div>
@@ -325,16 +327,16 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                         <div className="text-center">
                             {isConnecting ? (
                                 <>
-                                    <p className="font-medium text-lg">보안 연결 설정 중...</p>
-                                    <p className="text-sm text-gray-500 mt-1">AES-256-GCM 종단간 암호화 키 교환 진행</p>
+                                    <p className="font-medium text-lg">{t('securingConnection')}</p>
+                                    <p className="text-sm text-gray-500 mt-1">{t('keyExchange')}</p>
                                 </>
                             ) : (
                                 <>
                                     <p className="font-medium text-lg flex items-center gap-2">
                                         <History size={18} />
-                                        대화 이력 복원 중...
+                                        {t('restoringHistory')}
                                     </p>
-                                    <p className="text-sm text-gray-500 mt-1">암호화된 메시지를 복호화하고 있습니다</p>
+                                    <p className="text-sm text-gray-500 mt-1">{t('decryptingMessages')}</p>
                                 </>
                             )}
                         </div>
@@ -347,8 +349,8 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                             <WifiOff className="w-8 h-8 text-red-400" />
                         </div>
                         <div className="text-center max-w-sm px-4">
-                            <p className="font-semibold text-xl text-white">서버 연결이 끊어졌습니다</p>
-                            <p className="text-gray-400 mt-2 text-sm leading-relaxed">네트워크 상태를 확인해주세요. 연결이 복구되면 자동으로 보안 세션을 다시 수립합니다.</p>
+                            <p className="font-semibold text-xl text-white">{t('connectionLost')}</p>
+                            <p className="text-gray-400 mt-2 text-sm leading-relaxed">{t('connectionLostHint')}</p>
                         </div>
                         <Loader2 className="w-5 h-5 animate-spin text-gray-500 mt-4" />
                     </div>
@@ -365,7 +367,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                                 { label: '🔄 Claude', cmd: '/switch claude' },
                                 { label: '💎 Gemini', cmd: '/switch gemini' },
                                 { label: '⚡ Codex', cmd: '/switch codex' },
-                                { label: '🧹 화면 정리', cmd: 'clear' },
+                                { label: `🧹 ${t('clearScreen')}`, cmd: 'clear' },
                             ].map((action, idx) => (
                                 <button
                                     key={idx}
@@ -389,7 +391,7 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                placeholder="채팅 메시지 전송..."
+                                placeholder={t('inputPlaceholder')}
                                 className="flex-1 bg-transparent text-gray-100 placeholder-gray-500 outline-none h-10 text-[16px]"
                                 autoComplete="off"
                             />

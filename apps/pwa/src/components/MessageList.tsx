@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Copy, Check, ArrowDown, Zap } from 'lucide-react';
 import { ToolCard } from './ToolCard';
+import { useTranslations } from 'next-intl';
 
 type TextMsg = { kind: 'text'; id: string; content: string; role: 'user' | 'assistant'; timestamp?: number };
 type ToolMsg = { kind: 'tool'; id: string; name: string; args: string; output?: string; status: 'running' | 'done' | 'error'; error?: string };
@@ -15,6 +16,8 @@ function formatTime(ts?: number): string {
 
 function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false);
+    const t = useTranslations('common');
+    const tc = useTranslations('chat');
 
     const handleCopy = async () => {
         try {
@@ -28,10 +31,10 @@ function CopyButton({ text }: { text: string }) {
         <button
             onClick={handleCopy}
             className="inline-flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors mt-1"
-            title="복사"
+            title={tc('copyMessage')}
         >
             {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-            {copied ? '복사됨' : '복사'}
+            {copied ? t('copied') : t('copy')}
         </button>
     );
 }
