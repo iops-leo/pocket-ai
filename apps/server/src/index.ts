@@ -55,7 +55,10 @@ fastify.register(oauthPlugin, {
 const io = new Server(fastify.server, {
     cors: {
         origin: process.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:3002'],
-    }
+    },
+    // CLI가 무거운 작업 중 ping 응답 지연으로 disconnect 방지
+    pingTimeout: 60000,     // 60초 (기본 20초)
+    pingInterval: 30000,    // 30초 (기본 25초)
 });
 setupSocketIO(io, fastify);
 
