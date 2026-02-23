@@ -34,6 +34,7 @@ pocket-ai --no-remote       # 로컬 전용 모드
 - **비용 최적화**: MVP 완전 무료, 성장 후 사용량 기반 과금 (5천 명까지 $20/월)
 - **간편한 설정**: GitHub OAuth 로그인만으로 디바이스 자동 연결
 - **E2E 암호화**: 서버는 암호화된 메시지만 중계 (복호화 불가)
+- **풍부한 UI**: 도구별 전용 뷰 (Diff, Bash, Code Highlight), 마크다운 렌더링
 
 ## 아키텍처
 
@@ -88,6 +89,8 @@ pocket-ai/
 | Database | PostgreSQL | Supabase |
 | CLI | Node.js + node-pty (래퍼 + 원격 제어 통합) | 로컬 (npm -g) |
 | 암호화 | ECDH P-256 + AES-256-GCM | Web Crypto / Node crypto |
+| 마크다운 | react-markdown + Prism.js | PWA |
+| i18n | next-intl (한국어/영어) | PWA |
 
 ## 빠른 시작
 
@@ -114,8 +117,30 @@ pocket-ai remote <session-id>  # 세션 원격 접속
 1. 브라우저에서 https://pocket-ai-pwa.vercel.app 접속
 2. GitHub OAuth로 계정 생성/로그인
 3. PC에서 `pocket-ai start` 실행 (같은 계정으로 로그인)
-4. PWA 대시보드에 활성 PC 세션 자동 표시
+4. PWA 대시보드 사이드바에 활성 PC 세션 자동 표시
 5. 세션 클릭 → ECDH 키교환으로 E2E 암호화 자동 체결!
+
+## PWA 주요 기능
+
+### 듀얼페인 레이아웃
+- **사이드바**: 세션 목록, 검색, AI 엔진 필터 (Claude/Gemini/Codex)
+- **채팅 영역**: 선택한 세션과 대화
+- **모바일**: 슬라이드인 사이드바 + 오버레이
+
+### 도구별 전용 뷰
+| 도구 | 렌더링 |
+|------|--------|
+| **Edit** | Diff 뷰 (인라인 삭제/추가 하이라이팅) |
+| **Write** | 녹색 추가 라인 표시 |
+| **Bash** | `$` 프롬프트 + stdout/stderr 분리 |
+| **Read** | 파일 확장자 기반 구문 하이라이팅 |
+| **Grep** | 검색 패턴 + 매칭 결과 |
+
+### 채팅 UI
+- 마크다운 렌더링 + Prism.js 코드 하이라이팅
+- AI `<options>` 태그 → 선택지 버튼 자동 변환
+- 메시지 복사, 자동 스크롤, Thinking 인디케이터
+- 실시간 연결 상태 표시 (녹색/노란색/빨간색)
 
 ## 로컬/원격 모드
 
@@ -186,6 +211,11 @@ pocket-ai remote <session-id>  # 세션 원격 접속
 - [x] AES-256-GCM E2E 암호화
 - [x] 로컬/원격 모드 전환
 - [x] Railway + Supabase + Vercel 배포 완료
+- [x] 듀얼페인 레이아웃 (사이드바 + 채팅)
+- [x] 도구별 전용 뷰 (Edit Diff, Bash, Read, Grep, Write)
+- [x] 마크다운 렌더링 + 코드 하이라이팅
+- [x] AI `<options>` 태그 버튼 렌더링
+- [x] 다국어 지원 (한국어/영어)
 
 ### Phase 2: 안정화 + 네이티브
 - [ ] 푸시 알림

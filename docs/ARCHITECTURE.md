@@ -239,16 +239,29 @@ Room에 참여하지 않은 소켓의 메시지는 드롭한다.
 apps/pwa/
 ├── src/
 │   ├── app/
-│   │   ├── layout.tsx        # 루트 레이아웃
+│   │   ├── layout.tsx        # 루트 레이아웃 (next-intl Provider)
 │   │   ├── page.tsx          # 홈 (→ /login 리다이렉트)
 │   │   ├── login/
 │   │   │   └── page.tsx      # GitHub OAuth 로그인
-│   │   └── dashboard/
-│   │       └── page.tsx      # 세션 목록 → TerminalChat 진입
-│   └── components/
-│       ├── TerminalChat.tsx  # 구조화 채팅 UI + Socket.IO + ECDH 키교환 + E2E 암호화
-│       ├── MessageList.tsx   # text/tool 메시지 리스트 렌더러, 자동 스크롤
-│       └── ToolCard.tsx      # 툴 카드 (아이콘, 상태, 접힘/펼침 출력)
+│   │   ├── dashboard/
+│   │   │   └── page.tsx      # 듀얼페인 레이아웃 (사이드바 + 채팅)
+│   │   └── settings/
+│   │       └── page.tsx      # 설정 (프로필, 토큰, 언어)
+│   ├── components/
+│   │   ├── SessionSidebar.tsx   # 세션 목록 사이드바 (검색, 엔진필터, 온/오프라인 그룹)
+│   │   ├── NewSessionModal.tsx  # 새 세션 생성 모달
+│   │   ├── TerminalChat.tsx     # 채팅 UI (마크다운, 도구별 전용 뷰, E2E 암호화)
+│   │   ├── renderers/           # 메시지 렌더러 컴포넌트
+│   │   │   ├── MarkdownRenderer.tsx  # 마크다운 + 코드 하이라이팅
+│   │   │   ├── EditRenderer.tsx      # Edit 도구 Diff 뷰
+│   │   │   ├── WriteRenderer.tsx     # Write 도구 추가 라인 표시
+│   │   │   ├── BashRenderer.tsx      # Bash 도구 stdout/stderr 분리
+│   │   │   ├── ReadRenderer.tsx      # Read 도구 코드 하이라이팅
+│   │   │   └── GrepRenderer.tsx      # Grep 도구 검색 결과
+│   │   └── OptionsButton.tsx    # AI <options> 태그 버튼 렌더링
+│   └── messages/
+│       ├── ko.json              # 한국어 번역
+│       └── en.json              # 영어 번역
 ├── public/
 │   └── manifest.json         # PWA 매니페스트
 ├── next.config.js
@@ -256,17 +269,29 @@ apps/pwa/
 ```
 
 **핵심 기능**:
+- **듀얼페인 레이아웃**: 왼쪽 사이드바(세션 목록) + 오른쪽 채팅 영역
+- **세션 사이드바**: 검색, AI 엔진 필터(Claude/Gemini/Codex), 온라인/오프라인 그룹핑
+- **모바일 반응형**: 슬라이드인 사이드바 + 오버레이 백드롭
 - 계정 로그인으로 자동 세션 발견 + ECDH 키교환
-- E2E 암호화 메시지 송수신 (구조화 채팅 UI: 텍스트 블록 + 툴 카드)
-- CLI로부터 `text` / `tool-call` / `tool-result` 구조화 이벤트 수신 → 각 이벤트는 항상 새 버블로 렌더링
+- E2E 암호화 메시지 송수신
+- **도구별 전용 뷰**:
+  - **Edit**: Diff 뷰 (인라인 하이라이팅)
+  - **Write**: 녹색 추가 라인
+  - **Bash**: `$` 프롬프트 + stdout/stderr 분리
+  - **Read**: 파일 확장자 기반 구문 하이라이팅
+  - **Grep**: 검색 패턴 + 결과
+- **AI `<options>` 태그**: 선택지 버튼 자동 렌더링
+- **마크다운 렌더링**: Prism.js 코드 하이라이팅
 - Socket.IO 자동 재연결
+- **다국어 지원**: 한국어/영어 (next-intl)
 - PWA 설치 가능
 
 **기술 스택**:
 - Framework: Next.js 14+ (App Router)
 - Styling: Tailwind CSS
 - 실시간: socket.io-client
-- 메시지 렌더러: 구조화 채팅 UI (xterm.js 제거, 커스텀 MessageList/ToolCard 컴포넌트)
+- 마크다운: react-markdown + Prism.js
+- i18n: next-intl
 - Crypto: @pocket-ai/wire (Web Crypto API 기반 ECDH + AES-256-GCM)
 
 **Socket.IO 클라이언트 예시 (TerminalChat.tsx)**:
@@ -956,14 +981,15 @@ POCKET_AI_LOG_LEVEL=info
 
 Pocket AI는 Happy 프로젝트의 검증된 아키텍처를 참조하되, 핵심만 단순화하여 적용합니다:
 
-1. **CLI 단일 패키지 통합**: AI CLI 래퍼와 원격 제어를 `@pocket-ai/cli` 하나로 통합. `start`/`remote`/`status`/`stop` 서브커맨드로 직관적 전환 (설계 완료, 구현 예정)
-2. **데몬 프로세스**: 터미널 독립적 세션 유지로 진정한 원격 제어 실현 (설계 완료, 구현 예정)
-3. **로컬/리모트 모드**: 같은 세션을 키보드와 폰에서 끊김 없이 전환 (설계 완료, 구현 예정)
-4. **Socket.IO**: raw WebSocket 대비 자동 재연결, Room, 멀티플렉싱 내장. 키교환(`key-exchange`)과 메시지 중계(`update`) 이벤트 분리, Room 멤버십 검증 필수 (구현 완료)
+1. **CLI 단일 패키지 통합**: AI CLI 래퍼와 원격 제어를 `@pocket-ai/cli` 하나로 통합. `start`/`remote`/`status`/`stop` 서브커맨드로 직관적 전환 ✅
+2. **데몬 프로세스**: 터미널 독립적 세션 유지로 진정한 원격 제어 실현 ✅
+3. **로컬/리모트 모드**: 같은 세션을 키보드와 폰에서 끊김 없이 전환 ✅
+4. **Socket.IO**: raw WebSocket 대비 자동 재연결, Room, 멀티플렉싱 내장. 키교환(`key-exchange`)과 메시지 중계(`update`) 이벤트 분리, Room 멤버십 검증 필수 ✅
 5. **비용 최적화**: 초기 무료~$8, PostgreSQL free tier 시작, 점진적 확장
-6. **OAuth + 계정 기반 세션 발견**: GitHub OAuth/JWT로 사용자 인증, 같은 계정으로 세션 자동 발견 (QR 불필요)
-7. **ECDH P-256 + AES-256-GCM**: 키교환 자동화, 서버 복호화 불가 (Pure Relay)
-8. **Kysely**: 타입세이프 Query Builder로 PostgreSQL 접근 (users, oauth_accounts, subscriptions 3 테이블)
-9. **Zod 입력 검증**: 모든 REST API 요청과 Socket.IO 이벤트 페이로드를 `@pocket-ai/wire`의 공유 스키마로 검증. `request.body as any` 패턴 금지
+6. **OAuth + 계정 기반 세션 발견**: GitHub OAuth/JWT로 사용자 인증, 같은 계정으로 세션 자동 발견 (QR 불필요) ✅
+7. **ECDH P-256 + AES-256-GCM**: 키교환 자동화, 서버 복호화 불가 (Pure Relay) ✅
+8. **Kysely**: 타입세이프 Query Builder로 PostgreSQL 접근 (users, oauth_accounts, subscriptions 3 테이블) ✅
+9. **Zod 입력 검증**: 모든 REST API 요청과 Socket.IO 이벤트 페이로드를 `@pocket-ai/wire`의 공유 스키마로 검증 ✅
+10. **PWA 듀얼페인 UI**: Happy 스타일 사이드바 + 채팅 영역, 도구별 전용 뷰, 마크다운 렌더링, 다국어 지원 ✅
 
 복잡성을 줄이고 핵심 가치에 집중합니다.

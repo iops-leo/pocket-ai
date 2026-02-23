@@ -1,108 +1,58 @@
 # Pocket AI Documentation
 
-상업용 비용 최적화 원격 AI CLI 제어 플랫폼
+모바일/웹에서 PC의 AI CLI(Claude Code, Codex, Gemini CLI)를 원격 제어하는 플랫폼
 
 ## 문서 목록
 
 ### [ARCHITECTURE.md](./ARCHITECTURE.md)
 시스템 아키텍처 문서
 - 설계 원칙 (비용 최적화, 단순함)
-- 시스템 개요
-- 컴포넌트 구조 (server, pwa, agent, cli, wire)
-- 통신 흐름 (OAuth 로그인, QR 디바이스 페어링, 암호화 메시지, 로컬/원격 모드)
+- 시스템 개요 (4 패키지: server, pwa, cli, wire)
+- 통신 흐름 (OAuth 로그인, ECDH 키교환, E2E 암호화)
 - 데몬(daemon) 아키텍처
-- 암호화 설계 (AES-256-GCM)
+- 암호화 설계 (ECDH P-256 + AES-256-GCM)
 - 배포 아키텍처 (Railway + Vercel)
-- 확장 전략
 
 ### [BUSINESS.md](./BUSINESS.md)
 비즈니스 모델 문서
-- 비즈니스 개요 및 타겟 고객
-- 가격 정책 (FREE / PRO / TEAM / Enterprise)
-- 인프라 비용 분석 (단계별)
-- 수익 모델 및 예측
-- 성장 단계별 전략
+- 가격 정책 (FREE / PRO)
+- 인프라 비용 분석
 - 경쟁 분석
-- 마케팅 전략
 
 ### [SECURITY.md](./SECURITY.md)
 보안 설계 문서
-- 보안 원칙 (단순함, 서버 Blind)
-- 암호화 설계 (AES-256-GCM)
-- 키 관리 (QR 디바이스 페어링 시 전달, 수명 주기)
+- E2E 암호화 (ECDH P-256 → AES-256-GCM)
 - 서버 Blind Relay 원칙
 - 위협 모델 및 대응
-- 인증 (OAuth 로그인 + JWT + QR 디바이스 페어링)
-- 보안 체크리스트
 
 ### [API.md](./API.md)
 API 레퍼런스
 - REST API (세션 관리)
 - Socket.IO 이벤트 프로토콜
-- Wire 프로토콜 메시지 타입 (command, response, error)
-- 로컬/원격 모드 전환
-- 에러 처리
-- 예제 코드
-
----
-
-## 빠른 시작
-
-### 개발자
-
-1. [ARCHITECTURE.md](./ARCHITECTURE.md) - 시스템 이해
-2. [API.md](./API.md) - API 통합
-3. [SECURITY.md](./SECURITY.md) - 보안 요구사항
-
-### 비즈니스
-
-1. [BUSINESS.md](./BUSINESS.md) - 비즈니스 모델
-2. [ARCHITECTURE.md](./ARCHITECTURE.md) - 비용 구조
-
-### 보안 감사
-
-1. [SECURITY.md](./SECURITY.md) - 위협 모델
-2. [ARCHITECTURE.md](./ARCHITECTURE.md) - 암호화 설계
+- Wire 프로토콜 메시지 타입
 
 ---
 
 ## 핵심 컨셉
 
-### 인증 구조
-- **사용자 인증**: GitHub OAuth + JWT (QR은 인증 수단이 아님)
-- **디바이스 페어링**: QR 코드로 PC↔폰 연결 + E2E 암호화 키 교환
-- JWT는 모든 API 및 Socket.IO 연결에 필수
-
 ### E2E 암호화
-- AES-256-GCM 사용
-- 암호화 키는 QR 코드로 디바이스 페어링 시 전달
-- 서버는 복호화 불가
+- ECDH P-256 키교환 → AES-256-GCM 대칭키 파생
+- 서버는 복호화 불가 (Pure Relay)
+- GitHub OAuth 로그인으로 세션 자동 발견 (QR 불필요)
 
-### 서버 Pure Relay (완전 Blind)
-- 서버는 암호화된 메시지를 **저장하지 않고** 즉시 중계
-- 암호화 키는 서버에 없음 (QR로 클라이언트간 직접 교환)
-- DB에는 users/sessions/devices 메타데이터만 저장
-- 서버가 해킹당해도 메시지 내용/키 모두 없음
+### 서버 Pure Relay
+- 서버는 암호화된 메시지를 **즉시 중계만** (저장 없음)
+- DB에는 users/sessions 메타데이터만 저장
+- 서버 침해 시에도 메시지 내용 보호
 
-### 데몬(Daemon) 아키텍처
-- agent가 백그라운드 데몬으로 상시 실행
-- CLI는 데몬에 명령을 위임하는 클라이언트
-- 로컬 모드: CLI → 데몬 직접 통신 (서버 불필요)
-- 원격 모드: PWA → 서버(Socket.IO) → 데몬 중계
-
-### 로컬/원격 모드
-- 로컬 모드: 같은 기기에서 CLI로 직접 제어 (오프라인 가능)
-- 원격 모드: 스마트폰 PWA에서 원격으로 PC 제어
+### CLI 통합 패키지
+- `@pocket-ai/cli` 하나로 AI CLI 래핑 + 원격 제어 통합
+- `pocket-ai` 명령으로 claude 자동 실행 + 원격 활성화
+- JSONL 세션 감시로 구조화 이벤트 추출
 
 ### Wire 프로토콜
-- `wire` 패키지: 공통 타입, 암호화, 메시지 스키마 정의
-- CLI, agent, server, pwa가 공유하는 단일 통신 규약
-- Socket.IO 이벤트 기반 실시간 양방향 통신
-
-### 비용 최적화
-- 초기: Railway + Supabase PostgreSQL ($0-3/월)
-- 성장: 스케일업 PostgreSQL ($50-100/월)
-- 대규모: 멀티리전 ($300+/월)
+- `@pocket-ai/wire` 패키지: 공통 타입, 암호화, Zod 스키마
+- 4가지 이벤트: `text`, `tool-call`, `tool-result`, `session-event`
 
 ---
 
@@ -111,14 +61,37 @@ API 레퍼런스
 ```
 pocket-ai/
 ├── apps/
-│   ├── server/      # Fastify + Socket.IO 릴레이 서버 (순수 릴레이, 메시지 저장 없음)
-│   └── pwa/         # Next.js PWA 클라이언트
+│   ├── server/      # Fastify + Socket.IO 릴레이 (Railway)
+│   └── pwa/         # Next.js PWA 클라이언트 (Vercel)
 ├── packages/
-│   ├── cli/         # 사용자 CLI (데몬 클라이언트)
-│   ├── agent/       # 백그라운드 데몬 (PC 명령 실행)
-│   └── wire/        # 공통 타입, 암호화, Wire 프로토콜 스키마
+│   ├── cli/         # AI CLI 래퍼 + 원격 제어 (@pocket-ai/cli)
+│   └── wire/        # 프로토콜, 암호화, 타입 (@pocket-ai/wire)
 └── docs/            # 이 문서들
 ```
+
+---
+
+## PWA 주요 기능
+
+### 사이드바 + 듀얼페인 레이아웃
+- 왼쪽 사이드바: 세션 목록, 검색, 엔진 필터
+- 오른쪽: 채팅 영역
+- 모바일: 슬라이드인 사이드바
+
+### 채팅 UI
+- 마크다운 렌더링 + 코드 구문 하이라이팅 (Prism.js)
+- `<options>` 태그로 AI 선택지 버튼 렌더링
+- 도구별 전용 뷰:
+  - **Edit**: Diff 뷰 (인라인 하이라이팅)
+  - **Write**: 녹색 추가 라인
+  - **Bash**: `$` 프롬프트 + stdout/stderr 분리
+  - **Read**: 파일 확장자 기반 구문 하이라이팅
+  - **Grep**: 검색 패턴 + 결과
+
+### 연결 상태
+- 실시간 연결 상태 표시 (녹색/노란색/빨간색)
+- 자동 재연결 + 암호화 세션 복원
+- 대화 이력 복원 (암호화된 메시지 복호화)
 
 ---
 
@@ -126,18 +99,16 @@ pocket-ai/
 
 | 컴포넌트 | 기술 | 배포 |
 |---------|------|------|
-| PWA | Next.js 14+ | Vercel (무료) |
-| Server | Fastify + Socket.IO | Railway (free tier) |
-| Database | PostgreSQL (users/sessions/devices만) | Supabase |
-| Agent (데몬) | Node.js + node-pty | 로컬 백그라운드 |
-| CLI | Node.js (데몬 클라이언트) | 로컬 |
-| Wire 프로토콜 | 공통 타입/스키마 패키지 | - |
-| 암호화 | AES-256-GCM | Web Crypto / Node crypto |
+| PWA | Next.js 14+, Tailwind CSS, Socket.IO | Vercel |
+| Server | Fastify, Socket.IO, Kysely | Railway |
+| Database | PostgreSQL | Supabase |
+| CLI | Node.js, node-pty | 로컬 (npm -g) |
+| 암호화 | ECDH P-256 + AES-256-GCM | Web Crypto API |
 
 ---
 
-## 연락처
+## 배포 URL
 
-- 일반: hello@pocket-ai.app
-- 보안: security@pocket-ai.app
-- 지원: support@pocket-ai.app
+- **서버**: `https://pocket-ai-production.up.railway.app`
+- **PWA**: `https://pocket-ai-pwa.vercel.app`
+- **GitHub**: `https://github.com/iops-leo/pocket-ai`
