@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, ArrowUp } from 'lucide-react';
+import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, ArrowUp, History } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
-import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt } from '@pocket-ai/wire';
+import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt, type MessagesResponse } from '@pocket-ai/wire';
 import { MessageList, type ChatMessage } from './MessageList';
 
 interface TerminalChatProps {
@@ -18,9 +18,71 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [sessionMeta, setSessionMeta] = useState<{ engine?: string; hostname?: string; cwd?: string }>({});
     const [isAiThinking, setIsAiThinking] = useState(false);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [historyLoaded, setHistoryLoaded] = useState(false);
 
     const sharedSecretRef = useRef<CryptoKey | null>(null);
     const socketRef = useRef<Socket | null>(null);
+    const lastSeqRef = useRef<number | undefined>(undefined);
+
+    // 메시지 이력 로드 (암호화된 메시지 복호화)
+    const loadMessageHistory = useCallback(async (sharedSecret: CryptoKey) => {
+        const token = localStorage.getItem('pocket_ai_token');
+        if (!token || historyLoaded) return;
+
+        setIsLoadingHistory(true);
+        try {
+            const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const res = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/messages?limit=100`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (!res.ok) throw new Error('Failed to fetch history');
+
+            const json = await res.json();
+            const data = json.data as MessagesResponse;
+
+            // 암호화된 메시지 복호화
+            const decryptedMessages: ChatMessage[] = [];
+            for (const msg of data.messages) {
+                try {
+                    const decryptedJson = await decrypt(msg.encryptedBody, sharedSecret);
+                    const parsed = JSON.parse(decryptedJson);
+
+                    if (parsed.t === 'text') {
+                        decryptedMessages.push({
+                            kind: 'text',
+                            id: msg.id,
+                            role: msg.sender === 'pwa' ? 'user' : 'assistant',
+                            content: parsed.text,
+                            timestamp: new Date(msg.createdAt).getTime(),
+                        });
+                    } else if (parsed.t === 'tool-call') {
+                        decryptedMessages.push({
+                            kind: 'tool',
+                            id: parsed.id,
+                            name: parsed.name,
+                            args: parsed.arguments,
+                            status: 'done',
+                        });
+                    }
+                    // tool-result는 기존 tool-call 업데이트로 처리되므로 별도 추가 안함
+                } catch (e) {
+                    console.warn('Failed to decrypt message:', msg.id, e);
+                }
+            }
+
+            if (decryptedMessages.length > 0) {
+                setMessages(decryptedMessages);
+                lastSeqRef.current = data.messages[data.messages.length - 1]?.seq;
+            }
+            setHistoryLoaded(true);
+        } catch (e) {
+            console.error('Failed to load history:', e);
+        } finally {
+            setIsLoadingHistory(false);
+        }
+    }, [sessionId, historyLoaded]);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const initConnection = useCallback(async (socket: Socket) => {
@@ -48,6 +110,9 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
                     if (data.metadata) {
                         setSessionMeta(data.metadata);
                     }
+
+                    // E2E 키 교환 완료 후 메시지 이력 로드
+                    loadMessageHistory(sharedSecretRef.current);
 
                     setIsConnecting(false);
                     setIsDisconnected(false);
@@ -144,8 +209,14 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
         return () => {
             socket.disconnect();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sessionId, initConnection]);
+    }, [sessionId, initConnection, loadMessageHistory]);
+
+    // 세션 변경 시 상태 초기화
+    useEffect(() => {
+        setMessages([]);
+        setHistoryLoaded(false);
+        lastSeqRef.current = undefined;
+    }, [sessionId]);
 
     const handlePaste = async () => {
         try {
@@ -248,12 +319,24 @@ export function TerminalChat({ sessionId, onBack }: TerminalChatProps) {
             </header>
 
             <main className="flex-1 relative w-full min-h-0 bg-gray-950 flex flex-col">
-                {isConnecting && !isDisconnected && (
+                {(isConnecting || isLoadingHistory) && !isDisconnected && (
                     <div className="absolute inset-0 z-10 bg-gray-950/80 flex flex-col items-center justify-center text-gray-300 gap-4 backdrop-blur-sm">
                         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
                         <div className="text-center">
-                            <p className="font-medium text-lg">보안 연결 설정 중...</p>
-                            <p className="text-sm text-gray-500 mt-1">AES-256-GCM 종단간 암호화 키 교환 진행</p>
+                            {isConnecting ? (
+                                <>
+                                    <p className="font-medium text-lg">보안 연결 설정 중...</p>
+                                    <p className="text-sm text-gray-500 mt-1">AES-256-GCM 종단간 암호화 키 교환 진행</p>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="font-medium text-lg flex items-center gap-2">
+                                        <History size={18} />
+                                        대화 이력 복원 중...
+                                    </p>
+                                    <p className="text-sm text-gray-500 mt-1">암호화된 메시지를 복호화하고 있습니다</p>
+                                </>
+                            )}
                         </div>
                     </div>
                 )}

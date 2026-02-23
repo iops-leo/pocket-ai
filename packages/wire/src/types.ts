@@ -47,12 +47,32 @@ export interface KeyExchangeMessage {
     sender: 'cli' | 'pwa';
 }
 
+/** Encrypted body container (AES-256-GCM) */
+export interface EncryptedBody {
+    cipher: string;  // Base64 encoded ciphertext
+    iv: string;      // Base64 encoded IV
+}
+
 /** Encrypted update message relayed through server */
 export interface UpdateMessage {
     sessionId: string;
     sender: 'cli' | 'pwa';
-    body: {
-        cipher: string;
-        iv: string;
-    };
+    body: EncryptedBody;
+}
+
+/** Message record stored in database (server-side) */
+export interface MessageRecord {
+    id: string;
+    sessionId: string;
+    seq: number;
+    sender: 'cli' | 'pwa';
+    encryptedBody: EncryptedBody;
+    createdAt: string;  // ISO8601
+}
+
+/** Paginated messages response */
+export interface MessagesResponse {
+    messages: MessageRecord[];
+    hasMore: boolean;
+    nextCursor?: number;  // seq number for pagination
 }

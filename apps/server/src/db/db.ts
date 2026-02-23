@@ -37,11 +37,26 @@ export interface SessionTable {
     updated_at: Generated<Date>;
 }
 
+export interface EncryptedBody {
+    cipher: string;
+    iv: string;
+}
+
+export interface MessageTable {
+    id: Generated<string>;
+    session_id: string;
+    seq: number;
+    sender: 'cli' | 'pwa';
+    encrypted_body: EncryptedBody;  // 암호화된 메시지 (서버는 복호화 안함)
+    created_at: Generated<Date>;
+}
+
 export interface Database {
     users: UserTable;
     oauth_accounts: OAuthAccountTable;
     subscriptions: SubscriptionTable;
     sessions: SessionTable;
+    messages: MessageTable;
 }
 
 // Ensure you set DATABASE_URL in .env

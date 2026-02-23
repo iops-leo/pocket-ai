@@ -130,4 +130,74 @@ export async function sessionRoutes(fastify: FastifyInstance) {
 
         return { success: true, data: userSessions };
     });
+
+    // GET /api/sessions/:id/messages: 세션 메시지 이력 조회 (암호화된 상태)
+    fastify.get<{
+        Params: { id: string };
+        Querystring: { limit?: string; before?: string };
+    }>('/:id/messages', async (request, reply) => {
+        const token = request.headers.authorization?.replace('Bearer ', '');
+        if (!token) return reply.code(401).send({ error: 'Missing token' });
+
+        let decoded: any;
+        try {
+            decoded = fastify.jwt.verify(token);
+        } catch {
+            return reply.code(401).send({ error: 'Invalid token' });
+        }
+
+        const sessionId = request.params.id;
+        const limit = Math.min(parseInt(request.query.limit || '100'), 200);
+        const beforeSeq = request.query.before ? parseInt(request.query.before) : undefined;
+
+        // 세션 소유권 확인
+        const session = activeSessions.get(sessionId);
+        if (!session || session.userId !== decoded.sub) {
+            // 메모리에 없으면 DB 확인
+            const dbSession = await db
+                .selectFrom('sessions')
+                .select(['user_id'])
+                .where('id', '=', sessionId)
+                .executeTakeFirst();
+
+            if (!dbSession || dbSession.user_id !== decoded.sub) {
+                return reply.code(403).send({ error: 'Session not found or unauthorized' });
+            }
+        }
+
+        // 메시지 조회 (최신순 → seq 역순)
+        let query = db
+            .selectFrom('messages')
+            .selectAll()
+            .where('session_id', '=', sessionId)
+            .orderBy('seq', 'desc')
+            .limit(limit + 1); // hasMore 판별용 +1
+
+        if (beforeSeq !== undefined) {
+            query = query.where('seq', '<', beforeSeq);
+        }
+
+        const rows = await query.execute();
+
+        const hasMore = rows.length > limit;
+        const messages = rows.slice(0, limit).reverse().map(row => ({
+            id: row.id,
+            sessionId: row.session_id,
+            seq: row.seq,
+            sender: row.sender,
+            encryptedBody: typeof row.encrypted_body === 'string'
+                ? JSON.parse(row.encrypted_body)
+                : row.encrypted_body,
+            createdAt: row.created_at.toISOString(),
+        }));
+
+        return {
+            success: true,
+            data: {
+                messages,
+                hasMore,
+                nextCursor: hasMore ? rows[limit].seq : undefined,
+            },
+        };
+    });
 }
