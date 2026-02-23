@@ -29,6 +29,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const socketRef = useRef<Socket | null>(null);
     const lastSeqRef = useRef<number | undefined>(undefined);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    // 일시적 disconnect(초기 로딩 등)에서 오버레이 번쩍임 방지용 grace period 타이머
+    const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // 텍스트에어리어 높이 자동 조절
     const adjustTextareaHeight = useCallback(() => {
@@ -183,6 +185,11 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         socketRef.current = socket;
 
         socket.on('connect', () => {
+            // 재연결 시 pending disconnect 타이머 취소
+            if (disconnectTimerRef.current) {
+                clearTimeout(disconnectTimerRef.current);
+                disconnectTimerRef.current = null;
+            }
             setIsDisconnected(false);
             setIsConnecting(true);
             initConnection(socket);
@@ -190,10 +197,13 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
         socket.on('disconnect', (reason) => {
             console.warn('Socket disconnected:', reason);
-            setIsDisconnected(true);
             setIsConnecting(false);
             sharedSecretRef.current = null;
             sessionKeyRef.current = null;
+            // 1.5초 grace period: 빠른 재연결 시 오버레이 표시 안 함
+            disconnectTimerRef.current = setTimeout(() => {
+                setIsDisconnected(true);
+            }, 1500);
         });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -241,6 +251,9 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
         return () => {
             socket.disconnect();
+            if (disconnectTimerRef.current) {
+                clearTimeout(disconnectTimerRef.current);
+            }
         };
     }, [sessionId, initConnection]);
 
