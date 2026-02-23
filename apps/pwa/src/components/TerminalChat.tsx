@@ -279,33 +279,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         }
     };
 
-    // 퀵 액션: 클릭 시 바로 전송
-    const handleQuickAction = useCallback(async (cmd: string) => {
-        const encryptKey = sessionKeyRef.current || sharedSecretRef.current;
-        if (!socketRef.current || !encryptKey || isDisconnected || isConnecting) return;
-
-        setIsAiThinking(true);
-        setMessages(prev => [...prev, {
-            kind: 'text',
-            id: crypto.randomUUID(),
-            role: 'user' as const,
-            content: cmd,
-            timestamp: Date.now(),
-        }]);
-
-        try {
-            const msgStr = JSON.stringify({ t: 'text', text: cmd + '\r' });
-            const encryptedBody = await encrypt(msgStr, encryptKey);
-            socketRef.current.emit('update', {
-                t: 'encrypted',
-                sessionId,
-                sender: 'pwa',
-                body: encryptedBody
-            });
-        } catch (err) {
-            console.error('Failed to send quick action', err);
-        }
-    }, [isDisconnected, isConnecting, sessionId]);
 
     // 옵션 선택 시 해당 텍스트를 메시지로 전송
     const handleOptionSelect = useCallback(async (option: string) => {
@@ -374,13 +347,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const displayCwd = sessionMeta.cwd
         ? sessionMeta.cwd.replace(/^\/Users\/[^/]+/, '~').replace(/^\/home\/[^/]+/, '~')
         : null;
-
-    const quickActions = [
-        { label: '🔄 Claude', cmd: '/switch claude' },
-        { label: '💎 Gemini', cmd: '/switch gemini' },
-        { label: '⚡ Codex', cmd: '/switch codex' },
-        { label: `🧹 ${t('clearScreen')}`, cmd: 'clear' },
-    ];
 
     return (
         <div className={`flex flex-col ${embedded ? 'h-full' : 'h-[100dvh]'} bg-gray-950 font-sans text-gray-100 overflow-hidden`}>
@@ -481,25 +447,11 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
                 {/* 입력 영역 */}
                 <div className="flex-none bg-gray-950 w-full border-t border-gray-800/60">
-                    {/* 퀵 액션 칩 - 클릭 시 바로 전송 */}
-                    {!isDisconnected && !isConnecting && (
-                        <div className="max-w-3xl mx-auto w-full px-3 pt-2.5 overflow-x-auto no-scrollbar flex gap-1.5 snap-x">
-                            {quickActions.map((action, idx) => (
-                                <button
-                                    key={idx}
-                                    type="button"
-                                    onClick={() => handleQuickAction(action.cmd)}
-                                    className="snap-start whitespace-nowrap px-3 py-1.5 rounded-full bg-gray-800/70 hover:bg-gray-700 active:scale-95 text-gray-300 hover:text-white text-xs font-medium border border-gray-700/40 transition-all"
-                                >
-                                    {action.label}
-                                </button>
-                            ))}
-                        </div>
-                    )}
+
 
                     {/* 입력창 */}
-                    <div className="max-w-3xl mx-auto w-full px-3 pb-4 sm:pb-5 pt-2 flex items-end gap-2">
-                        <div className="flex-1 bg-gray-900 border border-gray-700/60 rounded-2xl flex items-end px-4 py-2 shadow-xl transition-all focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/30">
+                    <div className="max-w-3xl mx-auto w-full px-3 pb-4 sm:pb-5 pt-3 flex items-center gap-2">
+                        <div className="flex-1 bg-gray-900 border border-gray-700/60 rounded-2xl flex items-center px-4 py-2 shadow-xl transition-all focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/30">
                             <textarea
                                 ref={textareaRef}
                                 rows={1}
