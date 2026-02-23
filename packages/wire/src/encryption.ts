@@ -146,3 +146,80 @@ export async function decrypt(encrypted: EncryptedData, key: CryptoKey): Promise
     const dec = new TextDecoder();
     return dec.decode(decryptedBuffer);
 }
+
+/**
+ * Generates a new AES-256-GCM session key (extractable for export/wrap).
+ */
+export async function generateSessionKey(): Promise<CryptoKey> {
+    return await globalThis.crypto.subtle.generateKey(
+        { name: 'AES-GCM', length: 256 },
+        true, // extractable — needed for export and wrap
+        ['encrypt', 'decrypt']
+    );
+}
+
+/**
+ * Exports an AES-256-GCM CryptoKey to base64 raw format (for storage/transmission).
+ */
+export async function exportSessionKey(key: CryptoKey): Promise<string> {
+    const raw = await globalThis.crypto.subtle.exportKey('raw', key);
+    return Buffer.from(raw).toString('base64');
+}
+
+/**
+ * Imports a base64 raw AES-256-GCM key back to CryptoKey.
+ */
+export async function importSessionKey(base64Key: string): Promise<CryptoKey> {
+    const raw = Buffer.from(base64Key, 'base64');
+    return await globalThis.crypto.subtle.importKey(
+        'raw',
+        raw,
+        { name: 'AES-GCM', length: 256 },
+        true, // extractable
+        ['encrypt', 'decrypt']
+    );
+}
+
+/**
+ * Wraps (encrypts) a session key using an ECDH-derived shared secret.
+ * The session key is exported to raw bytes, then encrypted with AES-256-GCM.
+ */
+export async function wrapSessionKey(
+    sessionKey: CryptoKey,
+    ecdhSecret: CryptoKey
+): Promise<EncryptedData> {
+    const raw = await globalThis.crypto.subtle.exportKey('raw', sessionKey);
+    const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+    const cipherBuffer = await globalThis.crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        ecdhSecret,
+        raw
+    );
+    return {
+        cipher: Buffer.from(cipherBuffer).toString('base64'),
+        iv: Buffer.from(iv).toString('base64'),
+    };
+}
+
+/**
+ * Unwraps (decrypts) a session key that was wrapped with an ECDH-derived shared secret.
+ */
+export async function unwrapSessionKey(
+    wrapped: EncryptedData,
+    ecdhSecret: CryptoKey
+): Promise<CryptoKey> {
+    const iv = Buffer.from(wrapped.iv, 'base64');
+    const cipherBuffer = Buffer.from(wrapped.cipher, 'base64');
+    const rawBuffer = await globalThis.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        ecdhSecret,
+        cipherBuffer
+    );
+    return await globalThis.crypto.subtle.importKey(
+        'raw',
+        rawBuffer,
+        { name: 'AES-GCM', length: 256 },
+        true,
+        ['encrypt', 'decrypt']
+    );
+}

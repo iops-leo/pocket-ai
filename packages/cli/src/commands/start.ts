@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import os from 'os';
-import { generateECDHKeyPair, exportPublicKey, exportPrivateKey, importPublicKey, importPrivateKey, deriveSharedSecret, encrypt, decrypt } from '@pocket-ai/wire';
+import { generateECDHKeyPair, exportPublicKey, exportPrivateKey, importPublicKey, importPrivateKey, deriveSharedSecret, encrypt, decrypt, generateSessionKey, exportSessionKey, importSessionKey, wrapSessionKey } from '@pocket-ai/wire';
 import { getToken, saveSessionKeys, loadSessionKeys } from '../config.js';
 import { connectToServer, registerSession } from '../server/connection.js';
 import type { Socket } from 'socket.io-client';
@@ -21,12 +21,29 @@ export async function startSession(command: string = 'claude', options: { remote
 
   const cwd = process.cwd();
 
-  // 1. Happy 방식: 기존 키가 있으면 로드, 없으면 새로 생성
+  const existingKeys = loadSessionKeys(cwd);
+
+  // 1. Session Key 로드/생성 (안정적인 메시지 암호화용 — registerNewSession보다 먼저 필요)
+  let sessionKey: CryptoKey;
+  if (existingKeys?.sessionKey) {
+    try {
+      sessionKey = await importSessionKey(existingKeys.sessionKey);
+      console.log('[Pocket AI] 기존 session key 로드 완료 (이력 복호화 가능)');
+    } catch {
+      sessionKey = await generateSessionKey();
+      console.log('[Pocket AI] 기존 session key 로드 실패, 새로 생성');
+    }
+  } else {
+    sessionKey = await generateSessionKey();
+    console.log('[Pocket AI] 새 session key 생성');
+  }
+  const sessionKeyBase64 = await exportSessionKey(sessionKey);
+
+  // 2. ECDH 키 로드/생성 (Happy 방식: 기존 키가 있으면 로드, 없으면 새로 생성)
   let keyPair: CryptoKeyPair;
   let publicKeyBase64: string;
   let sessionId: string;
 
-  const existingKeys = loadSessionKeys(cwd);
   if (existingKeys) {
     // 기존 키쌍 복원
     try {
@@ -73,6 +90,7 @@ export async function startSession(command: string = 'claude', options: { remote
       publicKey: pubKey,
       privateKey: privateKeyBase64,
       sessionId: newSessionId,
+      sessionKey: sessionKeyBase64,
     });
     console.log('[Pocket AI] 암호화 키 저장 완료 (이력 복원용)');
 
@@ -104,9 +122,9 @@ export async function startSession(command: string = 'claude', options: { remote
   // JSONL session watcher — reads Claude Code's native transcript file
   // instead of parsing fragile PTY/ANSI output
   const sessionWatcher = new ClaudeSessionWatcher(process.cwd(), (events) => {
-    if (sharedSecret && socket) {
+    if (sessionKey && socket) {
       for (const event of events) {
-        encrypt(JSON.stringify(event), sharedSecret)
+        encrypt(JSON.stringify(event), sessionKey)
           .then((encrypted) => {
             socket!.emit('update', {
               sessionId,
@@ -161,6 +179,7 @@ export async function startSession(command: string = 'claude', options: { remote
           publicKey: publicKeyBase64,
           privateKey: privateKeyBase64,
           sessionId: newSessionId,
+          sessionKey: sessionKeyBase64,
         });
         console.log(`[Pocket AI] 세션 재등록 완료: ${newSessionId.slice(0, 8)}...`);
       },
@@ -173,17 +192,25 @@ export async function startSession(command: string = 'claude', options: { remote
       },
       onKeyExchange: async (data) => {
         try {
-          // PWA sent its public key - derive shared secret
+          // PWA sent its public key - derive shared secret (used only for session key transport)
           const peerPublicKey = await importPublicKey(data.publicKey);
           sharedSecret = await deriveSharedSecret(keyPair.privateKey, peerPublicKey);
+
+          // Session key를 ECDH shared secret으로 wrap하여 PWA에 전송
+          const wrappedKey = await wrapSessionKey(sessionKey, sharedSecret);
+          socket!.emit('session-key', {
+            sessionId,
+            wrappedKey,
+          });
+          console.log('[Pocket AI] Session key 전송 완료');
         } catch (err) {
           console.error('[Pocket AI] 키교환 실패:', err);
         }
       },
       onUpdate: async (data) => {
-        if (data.sender === 'pwa' && data.body && sharedSecret) {
+        if (data.sender === 'pwa' && data.body && sessionKey) {
           try {
-            const decrypted = await decrypt(data.body, sharedSecret);
+            const decrypted = await decrypt(data.body, sessionKey);
             const msg = JSON.parse(decrypted);
             if (msg.t === 'text') {
               const text = msg.text as string;

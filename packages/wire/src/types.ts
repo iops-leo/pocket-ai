@@ -53,6 +53,12 @@ export interface EncryptedBody {
     iv: string;      // Base64 encoded IV
 }
 
+/** Session key message — wrapped session key delivered via ECDH shared secret */
+export interface SessionKeyMessage {
+    sessionId: string;
+    wrappedKey: EncryptedBody;  // ECDH shared secret으로 wrap된 session key
+}
+
 /** Encrypted update message relayed through server */
 export interface UpdateMessage {
     sessionId: string;

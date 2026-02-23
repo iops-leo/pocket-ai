@@ -128,6 +128,13 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
             socket.to(`session_${sessionId}`).emit('key-exchange', payload);
         });
 
+        // 3.5. `session-key`: CLI가 wrap한 session key를 PWA에 중계
+        socket.on('session-key', (payload: any) => {
+            const { sessionId } = payload;
+            if (!sessionId || !socket.rooms.has(`session_${sessionId}`)) return;
+            socket.to(`session_${sessionId}`).emit('session-key', payload);
+        });
+
         // 4. `update`: 암호화 메시지 중계 + DB 저장 (서버는 복호화하지 않음)
         socket.on('update', async (payload: any) => {
             const { sessionId, sender, body } = payload;

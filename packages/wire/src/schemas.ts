@@ -38,6 +38,16 @@ export const KeyExchangeSchema = z.object({
 });
 export type KeyExchangePayload = z.infer<typeof KeyExchangeSchema>;
 
+/** session-key event payload (wrapped AES-256-GCM session key) */
+export const SessionKeySchema = z.object({
+    sessionId: z.string().uuid(),
+    wrappedKey: z.object({
+        cipher: z.string().min(1),
+        iv: z.string().min(1),
+    }),
+});
+export type SessionKeyPayload = z.infer<typeof SessionKeySchema>;
+
 /** update (encrypted message relay) event payload */
 export const UpdateSchema = z.object({
   sessionId: z.string().uuid(),

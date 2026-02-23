@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, ArrowUp, History } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
-import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt, type MessagesResponse } from '@pocket-ai/wire';
+import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt, unwrapSessionKey, type EncryptedData, type MessagesResponse } from '@pocket-ai/wire';
 import { MessageList, type ChatMessage } from './MessageList';
 import { useTranslations } from 'next-intl';
 
@@ -25,6 +25,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const [historyLoaded, setHistoryLoaded] = useState(false);
 
     const sharedSecretRef = useRef<CryptoKey | null>(null);
+    const sessionKeyRef = useRef<CryptoKey | null>(null);
     const socketRef = useRef<Socket | null>(null);
     const lastSeqRef = useRef<number | undefined>(undefined);
 
@@ -114,11 +115,38 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                         setSessionMeta(data.metadata);
                     }
 
-                    // E2E 키 교환 완료 후 서버에서 이력 로드 (Happy 방식: 동일 키로 복호화)
-                    loadMessageHistory(sharedSecretRef.current);
+                    // Session key 수신 대기 (CLI가 ECDH shared secret으로 wrap해서 전송)
+                    socket.once('session-key', async (skPayload: { sessionId: string; wrappedKey: EncryptedData }) => {
+                        try {
+                            if (!sharedSecretRef.current) throw new Error('No shared secret');
+                            sessionKeyRef.current = await unwrapSessionKey(skPayload.wrappedKey, sharedSecretRef.current);
+                            console.log('[Pocket AI] Session key 수신 완료');
 
-                    setIsConnecting(false);
-                    setIsDisconnected(false);
+                            // Session key로 이전 대화 이력 복호화
+                            loadMessageHistory(sessionKeyRef.current);
+
+                            setIsConnecting(false);
+                            setIsDisconnected(false);
+                        } catch (e) {
+                            console.error('[Pocket AI] Session key unwrap 실패:', e);
+                            // Fallback: ECDH shared secret 사용 (하위 호환)
+                            sessionKeyRef.current = sharedSecretRef.current;
+                            loadMessageHistory(sharedSecretRef.current!);
+                            setIsConnecting(false);
+                            setIsDisconnected(false);
+                        }
+                    });
+
+                    // Timeout: 5초 내 session-key 미수신 시 ECDH shared secret으로 fallback
+                    setTimeout(() => {
+                        if (!sessionKeyRef.current && sharedSecretRef.current) {
+                            console.warn('[Pocket AI] Session key timeout, falling back to ECDH shared secret');
+                            sessionKeyRef.current = sharedSecretRef.current;
+                            loadMessageHistory(sharedSecretRef.current!);
+                            setIsConnecting(false);
+                            setIsDisconnected(false);
+                        }
+                    }, 5000);
                 } catch (e) {
                     console.error('E2E Setup Failed', e);
                     setMessages(prev => [...prev, {
@@ -165,13 +193,15 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
             setIsDisconnected(true);
             setIsConnecting(false);
             sharedSecretRef.current = null;
+            sessionKeyRef.current = null;
         });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         socket.on('update', async (payload: any) => {
-            if (payload.sender === 'cli' && payload.body && sharedSecretRef.current) {
+            const decryptKey = sessionKeyRef.current || sharedSecretRef.current;
+            if (payload.sender === 'cli' && payload.body && decryptKey) {
                 try {
-                    const decryptedJson = await decrypt(payload.body, sharedSecretRef.current);
+                    const decryptedJson = await decrypt(payload.body, decryptKey);
                     const msg = JSON.parse(decryptedJson);
 
                     if (msg.t === 'text') {
@@ -219,14 +249,16 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         setMessages([]);
         setHistoryLoaded(false);
         lastSeqRef.current = undefined;
+        sessionKeyRef.current = null;
     }, [sessionId]);
 
     const handlePaste = async () => {
         try {
             const text = await navigator.clipboard.readText();
-            if (text && socketRef.current && sharedSecretRef.current && !isDisconnected && !isConnecting) {
+            const encryptKey = sessionKeyRef.current || sharedSecretRef.current;
+            if (text && socketRef.current && encryptKey && !isDisconnected && !isConnecting) {
                 const msgStr = JSON.stringify({ t: 'text', text: text });
-                const encryptedBody = await encrypt(msgStr, sharedSecretRef.current);
+                const encryptedBody = await encrypt(msgStr, encryptKey);
                 socketRef.current.emit('update', {
                     t: 'encrypted',
                     sessionId,
@@ -250,7 +282,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
     // 옵션 선택 시 해당 텍스트를 메시지로 전송
     const handleOptionSelect = useCallback(async (option: string) => {
-        if (!socketRef.current || !sharedSecretRef.current || isDisconnected) return;
+        const encryptKey = sessionKeyRef.current || sharedSecretRef.current;
+        if (!socketRef.current || !encryptKey || isDisconnected) return;
 
         // Show sent message immediately in chat
         setIsAiThinking(true);
@@ -264,7 +297,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
         try {
             const msgStr = JSON.stringify({ t: 'text', text: option + '\r' });
-            const encryptedBody = await encrypt(msgStr, sharedSecretRef.current);
+            const encryptedBody = await encrypt(msgStr, encryptKey);
 
             socketRef.current.emit('update', {
                 t: 'encrypted',
@@ -279,7 +312,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
     const handleSend = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        if (!inputValue.trim() || !socketRef.current || !sharedSecretRef.current || isDisconnected) return;
+        const encryptKey = sessionKeyRef.current || sharedSecretRef.current;
+        if (!inputValue.trim() || !socketRef.current || !encryptKey || isDisconnected) return;
 
         const text = inputValue;
         setInputValue('');
@@ -296,7 +330,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
         try {
             const msgStr = JSON.stringify({ t: 'text', text: text + '\r' });
-            const encryptedBody = await encrypt(msgStr, sharedSecretRef.current);
+            const encryptedBody = await encrypt(msgStr, encryptKey);
 
             socketRef.current.emit('update', {
                 t: 'encrypted',

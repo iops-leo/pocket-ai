@@ -5,6 +5,7 @@ interface SessionKeys {
   publicKey: string;  // Base64 SPKI
   privateKey: string; // Base64 PKCS8
   sessionId: string;
+  sessionKey?: string; // Base64 raw AES-256-GCM session key (stable for message history)
 }
 
 interface PocketAIConfig {

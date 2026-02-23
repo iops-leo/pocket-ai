@@ -31,4 +31,10 @@ export declare class ClaudeSessionWatcher {
     private readNewLines;
     private processLine;
     destroy(): void;
+    /**
+     * Read recent history from JSONL file (for PWA history restore).
+     * Returns events from the BEGINNING of the file (not just new entries).
+     * @param limit Maximum number of events to return
+     */
+    readHistory(limit?: number): SessionPayload[];
 }

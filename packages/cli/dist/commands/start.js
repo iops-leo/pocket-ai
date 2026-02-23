@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import os from 'os';
-import { generateECDHKeyPair, exportPublicKey, importPublicKey, deriveSharedSecret, encrypt, decrypt } from '@pocket-ai/wire';
-import { getToken } from '../config.js';
+import { generateECDHKeyPair, exportPublicKey, exportPrivateKey, importPublicKey, importPrivateKey, deriveSharedSecret, encrypt, decrypt, generateSessionKey, exportSessionKey, importSessionKey, wrapSessionKey } from '@pocket-ai/wire';
+import { getToken, saveSessionKeys, loadSessionKeys } from '../config.js';
 import { connectToServer, registerSession } from '../server/connection.js';
 import { SessionWatcher, getSessionDisplayName, isValidEngine } from '../session-manager.js';
 import { ClaudeSessionWatcher } from '../utils/session-watcher.js';
@@ -15,22 +15,79 @@ export async function startSession(command = 'claude', options = {}) {
         process.exit(1);
     }
     console.log(`Pocket AI - ${command} 세션을 시작합니다...`);
-    // 1. Generate ECDH key pair
-    const keyPair = await generateECDHKeyPair();
-    const publicKeyBase64 = await exportPublicKey(keyPair.publicKey);
-    // 2. Register session with server
+    const cwd = process.cwd();
+    const existingKeys = loadSessionKeys(cwd);
+    // 1. Session Key 로드/생성 (안정적인 메시지 암호화용 — registerNewSession보다 먼저 필요)
+    let sessionKey;
+    if (existingKeys?.sessionKey) {
+        try {
+            sessionKey = await importSessionKey(existingKeys.sessionKey);
+            console.log('[Pocket AI] 기존 session key 로드 완료 (이력 복호화 가능)');
+        }
+        catch {
+            sessionKey = await generateSessionKey();
+            console.log('[Pocket AI] 기존 session key 로드 실패, 새로 생성');
+        }
+    }
+    else {
+        sessionKey = await generateSessionKey();
+        console.log('[Pocket AI] 새 session key 생성');
+    }
+    const sessionKeyBase64 = await exportSessionKey(sessionKey);
+    // 2. ECDH 키 로드/생성 (Happy 방식: 기존 키가 있으면 로드, 없으면 새로 생성)
+    let keyPair;
+    let publicKeyBase64;
     let sessionId;
+    if (existingKeys) {
+        // 기존 키쌍 복원
+        try {
+            const privateKey = await importPrivateKey(existingKeys.privateKey);
+            const publicKey = await importPublicKey(existingKeys.publicKey);
+            keyPair = { privateKey, publicKey };
+            publicKeyBase64 = existingKeys.publicKey;
+            sessionId = existingKeys.sessionId;
+            console.log(`기존 세션 복원: ${sessionId.slice(0, 8)}... (이력 복원 가능)`);
+        }
+        catch (err) {
+            // 키 복원 실패 시 새로 생성
+            console.log('기존 키 복원 실패, 새 세션을 생성합니다...');
+            keyPair = await generateECDHKeyPair();
+            publicKeyBase64 = await exportPublicKey(keyPair.publicKey);
+            sessionId = await registerNewSession(publicKeyBase64, command, cwd, keyPair);
+        }
+    }
+    else {
+        // 새 키쌍 생성
+        keyPair = await generateECDHKeyPair();
+        publicKeyBase64 = await exportPublicKey(keyPair.publicKey);
+        sessionId = await registerNewSession(publicKeyBase64, command, cwd, keyPair);
+    }
+    // 세션이 서버에 존재하는지 확인하고, 없으면 재등록
     try {
-        sessionId = await registerSession(publicKeyBase64, {
-            hostname: os.hostname(),
-            engine: command,
-            cwd: process.cwd(),
-        });
-        console.log(`세션 등록 완료: ${sessionId.slice(0, 8)}...`);
+        // 세션 활성화 시도는 connectToServer에서 처리됨
     }
     catch (err) {
         console.error(`세션 등록 실패: ${err.message}`);
         process.exit(1);
+    }
+    // 새 세션 등록 헬퍼 함수
+    async function registerNewSession(pubKey, cmd, cwdPath, kp) {
+        const newSessionId = await registerSession(pubKey, {
+            hostname: os.hostname(),
+            engine: cmd,
+            cwd: cwdPath,
+        });
+        console.log(`새 세션 등록: ${newSessionId.slice(0, 8)}...`);
+        // 키쌍 로컬 저장 (Happy 방식)
+        const privateKeyBase64 = await exportPrivateKey(kp.privateKey);
+        saveSessionKeys(cwdPath, {
+            publicKey: pubKey,
+            privateKey: privateKeyBase64,
+            sessionId: newSessionId,
+            sessionKey: sessionKeyBase64,
+        });
+        console.log('[Pocket AI] 암호화 키 저장 완료 (이력 복원용)');
+        return newSessionId;
     }
     // 3. Dynamically import node-pty (native module)
     let pty;
@@ -55,9 +112,9 @@ export async function startSession(command = 'claude', options = {}) {
     // JSONL session watcher — reads Claude Code's native transcript file
     // instead of parsing fragile PTY/ANSI output
     const sessionWatcher = new ClaudeSessionWatcher(process.cwd(), (events) => {
-        if (sharedSecret && socket) {
+        if (sessionKey && socket) {
             for (const event of events) {
-                encrypt(JSON.stringify(event), sharedSecret)
+                encrypt(JSON.stringify(event), sessionKey)
                     .then((encrypted) => {
                     socket.emit('update', {
                         sessionId,
@@ -100,8 +157,16 @@ export async function startSession(command = 'claude', options = {}) {
             sessionId,
             publicKey: publicKeyBase64,
             metadata: sessionMetadata,
-            onSessionIdUpdate: (newSessionId) => {
+            onSessionIdUpdate: async (newSessionId) => {
                 sessionId = newSessionId;
+                // 새 세션 ID로 키 저장 갱신
+                const privateKeyBase64 = await exportPrivateKey(keyPair.privateKey);
+                saveSessionKeys(cwd, {
+                    publicKey: publicKeyBase64,
+                    privateKey: privateKeyBase64,
+                    sessionId: newSessionId,
+                    sessionKey: sessionKeyBase64,
+                });
                 console.log(`[Pocket AI] 세션 재등록 완료: ${newSessionId.slice(0, 8)}...`);
             },
             onAuthSuccess: (data) => {
@@ -113,18 +178,25 @@ export async function startSession(command = 'claude', options = {}) {
             },
             onKeyExchange: async (data) => {
                 try {
-                    // PWA sent its public key - derive shared secret
+                    // PWA sent its public key - derive shared secret (used only for session key transport)
                     const peerPublicKey = await importPublicKey(data.publicKey);
                     sharedSecret = await deriveSharedSecret(keyPair.privateKey, peerPublicKey);
+                    // Session key를 ECDH shared secret으로 wrap하여 PWA에 전송
+                    const wrappedKey = await wrapSessionKey(sessionKey, sharedSecret);
+                    socket.emit('session-key', {
+                        sessionId,
+                        wrappedKey,
+                    });
+                    console.log('[Pocket AI] Session key 전송 완료');
                 }
                 catch (err) {
                     console.error('[Pocket AI] 키교환 실패:', err);
                 }
             },
             onUpdate: async (data) => {
-                if (data.sender === 'pwa' && data.body && sharedSecret) {
+                if (data.sender === 'pwa' && data.body && sessionKey) {
                     try {
-                        const decrypted = await decrypt(data.body, sharedSecret);
+                        const decrypted = await decrypt(data.body, sessionKey);
                         const msg = JSON.parse(decrypted);
                         if (msg.t === 'text') {
                             const text = msg.text;
