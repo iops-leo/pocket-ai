@@ -259,7 +259,12 @@ export function ToolCard({ name, args, output, status, error }: ToolCardProps) {
     };
 
     return (
-        <div className="my-1 rounded-lg border border-gray-700/60 bg-gray-900/80 overflow-hidden">
+        <div className={`my-1 rounded-lg border overflow-hidden transition-all ${status === 'running'
+                ? 'border-yellow-500/50 bg-gray-900/80 shadow-[0_0_12px_rgba(234,179,8,0.15)] animate-pulse-subtle'
+                : status === 'error'
+                    ? 'border-red-500/40 bg-gray-900/80'
+                    : 'border-gray-700/60 bg-gray-900/80'
+            }`}>
             <button
                 onClick={() => showExpandable && setExpanded(!expanded)}
                 className="w-full flex items-center gap-2 px-3 py-2 text-left"

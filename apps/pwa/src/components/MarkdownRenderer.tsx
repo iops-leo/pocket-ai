@@ -111,18 +111,19 @@ function CopyCodeButton({ code }: { code: string }) {
 
 function OptionsBlock({ items, onSelect }: { items: string[]; onSelect?: (option: string) => void }) {
     return (
-        <div className="flex flex-wrap gap-2 my-3">
+        <div className="flex flex-col gap-2 my-3">
             {items.map((item, index) => (
                 <button
                     key={index}
                     onClick={() => onSelect?.(item)}
                     disabled={!onSelect}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all border
+                    className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition-all border
                         ${onSelect
-                            ? 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700 hover:border-gray-500 active:scale-95 cursor-pointer'
+                            ? 'bg-gray-900 border-blue-500/30 text-gray-100 hover:bg-blue-600/10 hover:border-blue-500/60 active:scale-[0.98] cursor-pointer'
                             : 'bg-gray-800/50 border-gray-700 text-gray-400 cursor-default'
                         }`}
                 >
+                    <span className="mr-2 text-blue-400 font-mono text-xs">{index + 1}.</span>
                     {item}
                 </button>
             ))}

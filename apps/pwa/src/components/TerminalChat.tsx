@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, ArrowUp, History } from 'lucide-react';
+import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, History, ArrowUp } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt, unwrapSessionKey, type EncryptedData, type MessagesResponse } from '@pocket-ai/wire';
 import { MessageList, type ChatMessage } from './MessageList';
@@ -28,8 +28,18 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const sessionKeyRef = useRef<CryptoKey | null>(null);
     const socketRef = useRef<Socket | null>(null);
     const lastSeqRef = useRef<number | undefined>(undefined);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-    // 메시지 이력 로드 (Happy 방식: 서버 DB에서 암호화된 메시지 조회 → 동일 키로 복호화)
+    // 텍스트에어리어 높이 자동 조절
+    const adjustTextareaHeight = useCallback(() => {
+        const ta = textareaRef.current;
+        if (!ta) return;
+        ta.style.height = 'auto';
+        const maxHeight = 160; // 최대 5줄 정도
+        ta.style.height = Math.min(ta.scrollHeight, maxHeight) + 'px';
+    }, []);
+
+    // 메시지 이력 로드
     const loadMessageHistory = useCallback(async (sharedSecret: CryptoKey) => {
         const token = localStorage.getItem('pocket_ai_token');
         if (!token || historyLoaded) return;
@@ -46,7 +56,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
             const json = await res.json();
             const data = json.data as MessagesResponse;
 
-            // 암호화된 메시지 복호화 (Happy 방식: CLI가 동일 키 유지)
             const decryptedMessages: ChatMessage[] = [];
             for (const msg of data.messages) {
                 try {
@@ -71,7 +80,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                         });
                     }
                 } catch {
-                    // 복호화 실패 = 키 불일치 (새 세션이거나 키가 변경됨)
                     console.debug('Skipping message with different key:', msg.id);
                 }
             }
@@ -115,21 +123,15 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                         setSessionMeta(data.metadata);
                     }
 
-                    // Session key 수신 대기 (CLI가 ECDH shared secret으로 wrap해서 전송)
                     socket.once('session-key', async (skPayload: { sessionId: string; wrappedKey: EncryptedData }) => {
                         try {
                             if (!sharedSecretRef.current) throw new Error('No shared secret');
                             sessionKeyRef.current = await unwrapSessionKey(skPayload.wrappedKey, sharedSecretRef.current);
-                            console.log('[Pocket AI] Session key 수신 완료');
-
-                            // Session key로 이전 대화 이력 복호화
                             loadMessageHistory(sessionKeyRef.current);
-
                             setIsConnecting(false);
                             setIsDisconnected(false);
                         } catch (e) {
                             console.error('[Pocket AI] Session key unwrap 실패:', e);
-                            // Fallback: ECDH shared secret 사용 (하위 호환)
                             sessionKeyRef.current = sharedSecretRef.current;
                             loadMessageHistory(sharedSecretRef.current!);
                             setIsConnecting(false);
@@ -137,10 +139,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                         }
                     });
 
-                    // Timeout: 5초 내 session-key 미수신 시 ECDH shared secret으로 fallback
                     setTimeout(() => {
                         if (!sessionKeyRef.current && sharedSecretRef.current) {
-                            console.warn('[Pocket AI] Session key timeout, falling back to ECDH shared secret');
                             sessionKeyRef.current = sharedSecretRef.current;
                             loadMessageHistory(sharedSecretRef.current!);
                             setIsConnecting(false);
@@ -271,21 +271,47 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         }
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        // Korean/Japanese/Chinese IME: isComposing=true means composition in progress
-        // Don't submit during IME composition; wait for confirmed Enter
-        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+    // 텍스트에어리어: Enter = 전송, Shift+Enter = 줄바꿈
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             handleSend();
         }
     };
+
+    // 퀵 액션: 클릭 시 바로 전송
+    const handleQuickAction = useCallback(async (cmd: string) => {
+        const encryptKey = sessionKeyRef.current || sharedSecretRef.current;
+        if (!socketRef.current || !encryptKey || isDisconnected || isConnecting) return;
+
+        setIsAiThinking(true);
+        setMessages(prev => [...prev, {
+            kind: 'text',
+            id: crypto.randomUUID(),
+            role: 'user' as const,
+            content: cmd,
+            timestamp: Date.now(),
+        }]);
+
+        try {
+            const msgStr = JSON.stringify({ t: 'text', text: cmd + '\r' });
+            const encryptedBody = await encrypt(msgStr, encryptKey);
+            socketRef.current.emit('update', {
+                t: 'encrypted',
+                sessionId,
+                sender: 'pwa',
+                body: encryptedBody
+            });
+        } catch (err) {
+            console.error('Failed to send quick action', err);
+        }
+    }, [isDisconnected, isConnecting, sessionId]);
 
     // 옵션 선택 시 해당 텍스트를 메시지로 전송
     const handleOptionSelect = useCallback(async (option: string) => {
         const encryptKey = sessionKeyRef.current || sharedSecretRef.current;
         if (!socketRef.current || !encryptKey || isDisconnected) return;
 
-        // Show sent message immediately in chat
         setIsAiThinking(true);
         setMessages(prev => [...prev, {
             kind: 'text',
@@ -298,7 +324,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         try {
             const msgStr = JSON.stringify({ t: 'text', text: option + '\r' });
             const encryptedBody = await encrypt(msgStr, encryptKey);
-
             socketRef.current.emit('update', {
                 t: 'encrypted',
                 sessionId,
@@ -317,8 +342,11 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
         const text = inputValue;
         setInputValue('');
+        // 높이 초기화
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+        }
 
-        // Show sent message immediately in chat (always new bubble)
         setIsAiThinking(true);
         setMessages(prev => [...prev, {
             kind: 'text',
@@ -331,7 +359,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         try {
             const msgStr = JSON.stringify({ t: 'text', text: text + '\r' });
             const encryptedBody = await encrypt(msgStr, encryptKey);
-
             socketRef.current.emit('update', {
                 t: 'encrypted',
                 sessionId,
@@ -343,64 +370,90 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         }
     };
 
+    // cwd를 더 읽기 좋게 표시
+    const displayCwd = sessionMeta.cwd
+        ? sessionMeta.cwd.replace(/^\/Users\/[^/]+/, '~').replace(/^\/home\/[^/]+/, '~')
+        : null;
+
+    const quickActions = [
+        { label: '🔄 Claude', cmd: '/switch claude' },
+        { label: '💎 Gemini', cmd: '/switch gemini' },
+        { label: '⚡ Codex', cmd: '/switch codex' },
+        { label: `🧹 ${t('clearScreen')}`, cmd: 'clear' },
+    ];
+
     return (
         <div className={`flex flex-col ${embedded ? 'h-full' : 'h-[100dvh]'} bg-gray-950 font-sans text-gray-100 overflow-hidden`}>
-            <header className="flex-none flex items-center justify-between p-3 border-b border-gray-800 bg-gray-900/80 backdrop-blur-md z-20">
-                <div className="flex items-center gap-3 min-w-0">
-                    {/* Show back button only on mobile in embedded mode, always on standalone */}
-                    {(!embedded || true) && (
-                        <button onClick={onBack} className={`p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-white flex-shrink-0 ${embedded ? 'lg:hidden' : ''}`}>
-                            <ArrowLeft size={20} />
-                        </button>
-                    )}
+            {/* Header */}
+            <header className="flex-none flex items-center justify-between px-3 py-2.5 border-b border-gray-800 bg-gray-900/80 backdrop-blur-md z-20">
+                <div className="flex items-center gap-2.5 min-w-0">
+                    <button onClick={onBack} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-white flex-shrink-0">
+                        <ArrowLeft size={18} />
+                    </button>
                     <div className="min-w-0">
-                        <h2 className="font-semibold text-sm md:text-base flex items-center gap-2 text-white">
-                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDisconnected ? 'bg-red-500' : isConnecting ? 'bg-yellow-500 animate-pulse' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'}`}></span>
-                            <span className="truncate">
+                        <div className="flex items-center gap-2">
+                            {/* 상태 표시 dot */}
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDisconnected
+                                ? 'bg-red-500'
+                                : isConnecting
+                                    ? 'bg-yellow-400 animate-pulse'
+                                    : 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]'
+                                }`} />
+                            <h2 className="font-semibold text-sm text-white truncate">
                                 {sessionMeta.engine
                                     ? sessionMeta.engine.charAt(0).toUpperCase() + sessionMeta.engine.slice(1)
                                     : sessionId.split('-')[0]}
-                            </span>
-                            <span className="hidden sm:inline text-gray-400 font-normal text-xs">
-                                ({isDisconnected ? t('disconnected') : isConnecting ? t('connecting') : t('connected')})
-                            </span>
-                        </h2>
-                        {sessionMeta.cwd && (
-                            <p className="text-[11px] text-gray-500 truncate">
-                                {sessionMeta.cwd.split('/').slice(-2).join('/')}
+                                {sessionMeta.hostname && (
+                                    <span className="text-gray-400 font-normal ml-1.5">@ {sessionMeta.hostname}</span>
+                                )}
+                            </h2>
+                        </div>
+                        {displayCwd && (
+                            <p className="text-[11px] text-gray-500 font-mono truncate mt-0.5" title={sessionMeta.cwd}>
+                                {displayCwd}
                             </p>
                         )}
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* 헤더 우측: 상태 뱃지 + 붙여넣기 버튼 */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`hidden sm:inline text-[11px] px-2 py-0.5 rounded-full border font-medium ${isDisconnected
+                        ? 'text-red-400 border-red-500/30 bg-red-500/10'
+                        : isConnecting
+                            ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10'
+                            : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                        }`}>
+                        {isDisconnected ? t('disconnected') : isConnecting ? t('connecting') : t('connected')}
+                    </span>
                     {!isDisconnected && !isConnecting && (
                         <button
                             onClick={handlePaste}
-                            className="px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors border border-gray-700 hover:border-gray-600"
+                            className="p-2 flex items-center gap-1.5 text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-700 rounded-lg transition-colors border border-gray-700/50"
                             title={t('clipboardPaste')}
                         >
-                            <ClipboardPaste size={14} />
-                            <span className="hidden sm:inline">{t('paste')}</span>
+                            <ClipboardPaste size={15} />
                         </button>
                     )}
                 </div>
             </header>
 
+            {/* Main chat area */}
             <main className="flex-1 relative w-full min-h-0 bg-gray-950 flex flex-col">
+                {/* 연결 중 오버레이 */}
                 {(isConnecting || isLoadingHistory) && !isDisconnected && (
-                    <div className="absolute inset-0 z-10 bg-gray-950/80 flex flex-col items-center justify-center text-gray-300 gap-4 backdrop-blur-sm">
-                        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    <div className="absolute inset-0 z-10 bg-gray-950/85 flex flex-col items-center justify-center text-gray-300 gap-4 backdrop-blur-sm">
+                        <Loader2 className="w-7 h-7 animate-spin text-blue-400" />
                         <div className="text-center">
                             {isConnecting ? (
                                 <>
-                                    <p className="font-medium text-lg">{t('securingConnection')}</p>
+                                    <p className="font-medium text-base">{t('securingConnection')}</p>
                                     <p className="text-sm text-gray-500 mt-1">{t('keyExchange')}</p>
                                 </>
                             ) : (
                                 <>
-                                    <p className="font-medium text-lg flex items-center gap-2">
-                                        <History size={18} />
+                                    <p className="font-medium text-base flex items-center gap-2 justify-center">
+                                        <History size={16} />
                                         {t('restoringHistory')}
                                     </p>
                                     <p className="text-sm text-gray-500 mt-1">{t('decryptingMessages')}</p>
@@ -410,37 +463,33 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     </div>
                 )}
 
+                {/* 연결 끊김 오버레이 */}
                 {isDisconnected && (
                     <div className="absolute inset-0 z-10 bg-gray-950/90 flex flex-col items-center justify-center text-gray-300 gap-5 backdrop-blur-md">
-                        <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center border border-red-500/20 shadow-lg">
-                            <WifiOff className="w-8 h-8 text-red-400" />
+                        <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center border border-red-500/20">
+                            <WifiOff className="w-7 h-7 text-red-400" />
                         </div>
-                        <div className="text-center max-w-sm px-4">
-                            <p className="font-semibold text-xl text-white">{t('connectionLost')}</p>
-                            <p className="text-gray-400 mt-2 text-sm leading-relaxed">{t('connectionLostHint')}</p>
+                        <div className="text-center max-w-xs px-4">
+                            <p className="font-semibold text-lg text-white">{t('connectionLost')}</p>
+                            <p className="text-gray-400 mt-1.5 text-sm leading-relaxed">{t('connectionLostHint')}</p>
                         </div>
-                        <Loader2 className="w-5 h-5 animate-spin text-gray-500 mt-4" />
+                        <Loader2 className="w-5 h-5 animate-spin text-gray-600 mt-2" />
                     </div>
                 )}
 
                 <MessageList messages={messages} isAiThinking={isAiThinking} onOptionSelect={handleOptionSelect} />
 
-                {/* Input bar */}
+                {/* 입력 영역 */}
                 <div className="flex-none bg-gray-950 w-full border-t border-gray-800/60">
-                    {/* Quick Action Chips */}
+                    {/* 퀵 액션 칩 - 클릭 시 바로 전송 */}
                     {!isDisconnected && !isConnecting && (
-                        <div className="w-full px-4 pt-2 overflow-x-auto no-scrollbar flex gap-2 snap-x">
-                            {[
-                                { label: '🔄 Claude', cmd: '/switch claude' },
-                                { label: '💎 Gemini', cmd: '/switch gemini' },
-                                { label: '⚡ Codex', cmd: '/switch codex' },
-                                { label: `🧹 ${t('clearScreen')}`, cmd: 'clear' },
-                            ].map((action, idx) => (
+                        <div className="max-w-3xl mx-auto w-full px-3 pt-2.5 overflow-x-auto no-scrollbar flex gap-1.5 snap-x">
+                            {quickActions.map((action, idx) => (
                                 <button
                                     key={idx}
                                     type="button"
-                                    onClick={() => setInputValue(action.cmd)}
-                                    className="snap-start whitespace-nowrap px-3 py-1.5 rounded-full bg-gray-800/80 hover:bg-gray-700 text-gray-300 text-xs font-medium border border-gray-700/50 backdrop-blur-md transition-colors"
+                                    onClick={() => handleQuickAction(action.cmd)}
+                                    className="snap-start whitespace-nowrap px-3 py-1.5 rounded-full bg-gray-800/70 hover:bg-gray-700 active:scale-95 text-gray-300 hover:text-white text-xs font-medium border border-gray-700/40 transition-all"
                                 >
                                     {action.label}
                                 </button>
@@ -448,29 +497,38 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                         </div>
                     )}
 
-                    <div className="w-full px-4 pb-4 sm:pb-5 pt-2 flex items-center">
-                        <form
-                            onSubmit={handleSend}
-                            className="bg-gray-900 border border-gray-700/60 rounded-full flex items-center pr-2 pl-4 py-1.5 shadow-xl w-full transition-all focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/50"
-                        >
-                            <input
-                                type="text"
+                    {/* 입력창 */}
+                    <div className="max-w-3xl mx-auto w-full px-3 pb-4 sm:pb-5 pt-2 flex items-end gap-2">
+                        <div className="flex-1 bg-gray-900 border border-gray-700/60 rounded-2xl flex items-end px-4 py-2 shadow-xl transition-all focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/30">
+                            <textarea
+                                ref={textareaRef}
+                                rows={1}
                                 value={inputValue}
-                                onChange={(e) => setInputValue(e.target.value)}
+                                onChange={(e) => {
+                                    setInputValue(e.target.value);
+                                    adjustTextareaHeight();
+                                }}
                                 onKeyDown={handleKeyDown}
                                 placeholder={t('inputPlaceholder')}
-                                className="flex-1 bg-transparent text-gray-100 placeholder-gray-500 outline-none h-10 text-[16px]"
+                                className="flex-1 bg-transparent text-gray-100 placeholder-gray-500 outline-none resize-none text-[16px] leading-relaxed py-1 min-h-[26px] max-h-40 overflow-y-auto"
                                 autoComplete="off"
+                                style={{ height: 'auto' }}
                             />
-                            <button
-                                type="submit"
-                                disabled={!inputValue.trim() || isDisconnected}
-                                className="w-9 h-9 flex justify-center items-center bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 text-white rounded-full transition-colors ml-2 flex-shrink-0"
-                            >
-                                <ArrowUp size={18} strokeWidth={2.5} />
-                            </button>
-                        </form>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => handleSend()}
+                            disabled={!inputValue.trim() || isDisconnected}
+                            className="flex-shrink-0 w-10 h-10 flex justify-center items-center bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-full transition-all active:scale-90 shadow-lg"
+                        >
+                            <ArrowUp size={18} strokeWidth={2.5} />
+                        </button>
                     </div>
+
+                    {/* Shift+Enter 힌트 */}
+                    <p className="max-w-3xl mx-auto text-[10px] text-gray-700 text-center pb-2">
+                        <kbd className="font-mono">Shift+Enter</kbd> 줄바꿈 · <kbd className="font-mono">Enter</kbd> 전송
+                    </p>
                 </div>
             </main>
         </div>
