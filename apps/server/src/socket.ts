@@ -90,6 +90,9 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                         .set({ status: 'online', updated_at: new Date() })
                         .where('id', '=', sessionId)
                         .execute();
+
+                    // PWA에게 세션 온라인 알림 (사이드바 갱신용)
+                    io.emit('session-online', { sessionId, metadata: session.metadata });
                 } else {
                     socket.emit('auth-error', { error: 'Invalid session or ownership' });
                 }
