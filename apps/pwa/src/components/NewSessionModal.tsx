@@ -1,12 +1,20 @@
 'use client';
 
-import { useState } from 'react';
-import { X, FolderOpen, Cpu, Terminal, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { X, FolderOpen, Cpu, Terminal, Loader2, Pin, PinOff, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+
+interface RecentPathItem {
+    path: string;
+    engine?: string;
+    lastUsedAt?: string;
+    useCount?: number;
+}
 
 interface NewSessionModalProps {
     onClose: () => void;
     onSubmit: (data: { cwd: string; engine: string }) => Promise<void>;
+    recentPaths?: RecentPathItem[];
 }
 
 const ENGINES = [
@@ -22,13 +30,76 @@ const QUICK_PATHS = [
     { label: '현재 위치', path: '.' },
 ];
 
-export function NewSessionModal({ onClose, onSubmit }: NewSessionModalProps) {
+const RECENT_PATH_PINS_KEY = 'pocket_ai_recent_path_pins';
+const RECENT_PATH_HIDDEN_KEY = 'pocket_ai_recent_path_hidden';
+
+export function NewSessionModal({ onClose, onSubmit, recentPaths = [] }: NewSessionModalProps) {
     const t = useTranslations('dashboard');
     const tc = useTranslations('common');
     const [cwd, setCwd] = useState('');
     const [engine, setEngine] = useState('claude');
+    const [recentEngineFilter, setRecentEngineFilter] = useState('all');
+    const [pinnedPaths, setPinnedPaths] = useState<string[]>([]);
+    const [hiddenPaths, setHiddenPaths] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        try {
+            const savedPins = localStorage.getItem(RECENT_PATH_PINS_KEY);
+            if (savedPins) {
+                const parsed = JSON.parse(savedPins);
+                if (Array.isArray(parsed)) {
+                    setPinnedPaths(parsed.filter((v): v is string => typeof v === 'string'));
+                }
+            }
+            const savedHidden = localStorage.getItem(RECENT_PATH_HIDDEN_KEY);
+            if (savedHidden) {
+                const parsed = JSON.parse(savedHidden);
+                if (Array.isArray(parsed)) {
+                    setHiddenPaths(parsed.filter((v): v is string => typeof v === 'string'));
+                }
+            }
+        } catch {
+            // ignore parsing/storage errors
+        }
+    }, []);
+
+    useEffect(() => {
+        localStorage.setItem(RECENT_PATH_PINS_KEY, JSON.stringify(pinnedPaths));
+    }, [pinnedPaths]);
+
+    useEffect(() => {
+        localStorage.setItem(RECENT_PATH_HIDDEN_KEY, JSON.stringify(hiddenPaths));
+    }, [hiddenPaths]);
+
+    const availableRecentEngines = useMemo(() => {
+        return Array.from(new Set(recentPaths.map(path => path.engine).filter(Boolean))) as string[];
+    }, [recentPaths]);
+
+    const visibleRecentPaths = useMemo(() => {
+        return recentPaths
+            .filter(item => !hiddenPaths.includes(item.path))
+            .filter(item => recentEngineFilter === 'all' ? true : item.engine === recentEngineFilter)
+            .sort((a, b) => {
+                const aPinned = pinnedPaths.includes(a.path);
+                const bPinned = pinnedPaths.includes(b.path);
+                if (aPinned !== bPinned) return aPinned ? -1 : 1;
+
+                const aTime = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0;
+                const bTime = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
+                return bTime - aTime;
+            });
+    }, [hiddenPaths, pinnedPaths, recentEngineFilter, recentPaths]);
+
+    const togglePinPath = (path: string) => {
+        setPinnedPaths(prev => prev.includes(path) ? prev.filter(item => item !== path) : [path, ...prev]);
+    };
+
+    const hidePath = (path: string) => {
+        setHiddenPaths(prev => prev.includes(path) ? prev : [path, ...prev]);
+        setPinnedPaths(prev => prev.filter(item => item !== path));
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -95,6 +166,81 @@ export function NewSessionModal({ onClose, onSubmit }: NewSessionModalProps) {
                                 </button>
                             ))}
                         </div>
+
+                        {recentPaths.length > 0 && (
+                            <div className="mt-3">
+                                <p className="text-xs text-gray-500 mb-2">{t('recentPaths')}</p>
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setRecentEngineFilter('all')}
+                                        className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${recentEngineFilter === 'all'
+                                            ? 'bg-gray-700 text-white border-gray-600'
+                                            : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white'
+                                            }`}
+                                    >
+                                        {t('recentPathsAll')}
+                                    </button>
+                                    {availableRecentEngines.map(eng => (
+                                        <button
+                                            key={eng}
+                                            type="button"
+                                            onClick={() => setRecentEngineFilter(eng)}
+                                            className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${recentEngineFilter === eng
+                                                ? 'bg-blue-900/50 text-blue-100 border-blue-700'
+                                                : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white'
+                                                }`}
+                                        >
+                                            {eng}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                                    {visibleRecentPaths.length === 0 && (
+                                        <p className="text-xs text-gray-500">{t('recentPathsEmpty')}</p>
+                                    )}
+                                    {visibleRecentPaths.map(item => {
+                                        const isPinned = pinnedPaths.includes(item.path);
+                                        return (
+                                            <div
+                                                key={item.path}
+                                                className="flex items-center gap-2 p-2 rounded-lg bg-gray-800/70 border border-gray-700/60"
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCwd(item.path)}
+                                                    className="flex-1 text-left min-w-0"
+                                                    title={item.path}
+                                                >
+                                                    <p className="text-xs text-gray-100 font-mono truncate">{item.path}</p>
+                                                    <p className="text-[11px] text-gray-500 truncate">
+                                                        {item.engine || 'unknown'}
+                                                        {typeof item.useCount === 'number' ? ` · ${item.useCount}` : ''}
+                                                    </p>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => togglePinPath(item.path)}
+                                                    className="p-1.5 rounded-md text-gray-400 hover:text-yellow-300 hover:bg-gray-700 transition-colors"
+                                                    title={isPinned ? t('unpinPath') : t('pinPath')}
+                                                >
+                                                    {isPinned ? <PinOff size={14} /> : <Pin size={14} />}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => hidePath(item.path)}
+                                                    className="p-1.5 rounded-md text-gray-400 hover:text-red-300 hover:bg-gray-700 transition-colors"
+                                                    title={t('removePath')}
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Engine Selection */}

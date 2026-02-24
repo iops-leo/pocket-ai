@@ -8,6 +8,7 @@ import { SessionSidebar } from '@/components/SessionSidebar';
 import { NewSessionModal } from '@/components/NewSessionModal';
 import { io, Socket } from 'socket.io-client';
 import { useTranslations } from 'next-intl';
+import { generateECDHKeyPair, exportPublicKey } from '@pocket-ai/wire';
 
 interface Session {
     sessionId: string;
@@ -21,11 +22,19 @@ interface Session {
     lastPing?: number;
 }
 
+interface RecentPathItem {
+    path: string;
+    engine?: string;
+    lastUsedAt?: string;
+    useCount?: number;
+}
+
 export default function DashboardPage() {
     const router = useRouter();
     const t = useTranslations('dashboard');
     const [sessions, setSessions] = useState<Session[]>([]);
     const [activeSession, setActiveSession] = useState<string | null>(null);
+    const [recentPaths, setRecentPaths] = useState<RecentPathItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +46,7 @@ export default function DashboardPage() {
     const [showNewSessionModal, setShowNewSessionModal] = useState(false);
 
     const socketRef = useRef<Socket | null>(null);
+    const hasAutoOpenedMobileSidebar = useRef(false);
 
     const fetchSessions = useCallback(async (showLoader = true) => {
         const token = localStorage.getItem('pocket_ai_token');
@@ -75,8 +85,52 @@ export default function DashboardPage() {
         }
     }, [router, t]);
 
+    const fetchRecentPaths = useCallback(async () => {
+        const token = localStorage.getItem('pocket_ai_token');
+        if (!token) return;
+
+        try {
+            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const res = await fetch(`${serverUrl}/api/sessions/recent-paths?limit=8`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!res.ok) return;
+
+            const data = await res.json();
+            if (data.success && Array.isArray(data.data)) {
+                const normalized = data.data
+                    .map((item: unknown): RecentPathItem | null => {
+                        if (typeof item === 'string') {
+                            return { path: item };
+                        }
+                        if (typeof item === 'object' && item !== null) {
+                            const parsed = item as Record<string, unknown>;
+                            if (typeof parsed.path !== 'string') {
+                                return null;
+                            }
+                            return {
+                                path: parsed.path,
+                                engine: typeof parsed.engine === 'string' ? parsed.engine : undefined,
+                                lastUsedAt: typeof parsed.lastUsedAt === 'string' ? parsed.lastUsedAt : undefined,
+                                useCount: typeof parsed.useCount === 'number' ? parsed.useCount : undefined,
+                            };
+                        }
+                        return null;
+                    })
+                    .filter((item: RecentPathItem | null): item is RecentPathItem => item !== null);
+                setRecentPaths(normalized);
+            }
+        } catch {
+            // 최근 경로 로드는 UX 보조 기능이므로 실패 무시
+        }
+    }, []);
+
     useEffect(() => {
         fetchSessions(true);
+        fetchRecentPaths();
 
         const token = localStorage.getItem('pocket_ai_token');
         if (!token) return;
@@ -111,7 +165,17 @@ export default function DashboardPage() {
         return () => {
             socket.disconnect();
         };
-    }, [fetchSessions]);
+    }, [fetchSessions, fetchRecentPaths]);
+
+    useEffect(() => {
+        if (hasAutoOpenedMobileSidebar.current) return;
+        if (typeof window === 'undefined') return;
+        if (window.innerWidth >= 1024) return;
+        if (activeSession) return;
+
+        setIsMobileSidebarOpen(true);
+        hasAutoOpenedMobileSidebar.current = true;
+    }, [activeSession]);
 
     const handleSelectSession = (sessionId: string) => {
         setActiveSession(sessionId);
@@ -119,11 +183,56 @@ export default function DashboardPage() {
     };
 
     const handleNewSession = async (data: { cwd: string; engine: string }) => {
-        // Note: This creates a placeholder - actual session creation happens on the PC
-        // For now, show a hint to the user
-        console.log('New session request:', data);
-        // In a real implementation, this would send a notification to the PC daemon
-        // For now, just close the modal
+        const token = localStorage.getItem('pocket_ai_token');
+        if (!token) {
+            router.replace('/login');
+            throw new Error(t('createFailed'));
+        }
+
+        const keyPair = await generateECDHKeyPair();
+        const publicKey = await exportPublicKey(keyPair.publicKey);
+        const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+        const res = await fetch(`${serverUrl}/api/sessions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                publicKey,
+                metadata: {
+                    cwd: data.cwd,
+                    engine: data.engine,
+                    hostname: 'pending-from-pwa',
+                },
+            }),
+        });
+
+        if (res.status === 401) {
+            localStorage.removeItem('pocket_ai_token');
+            router.replace('/login');
+            throw new Error(t('createFailed'));
+        }
+
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok || !payload.success) {
+            throw new Error(payload.error || t('createFailed'));
+        }
+
+        setRecentPaths(prev => {
+            const next = [
+                {
+                    path: data.cwd,
+                    engine: data.engine,
+                    lastUsedAt: new Date().toISOString(),
+                    useCount: (prev.find(item => item.path === data.cwd)?.useCount ?? 0) + 1,
+                },
+                ...prev.filter(item => item.path !== data.cwd),
+            ];
+            return next.slice(0, 8);
+        });
+        await fetchSessions(false);
     };
 
     // Loading state
@@ -229,6 +338,7 @@ export default function DashboardPage() {
                 <NewSessionModal
                     onClose={() => setShowNewSessionModal(false)}
                     onSubmit={handleNewSession}
+                    recentPaths={recentPaths}
                 />
             )}
         </div>

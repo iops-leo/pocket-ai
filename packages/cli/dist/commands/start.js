@@ -4,7 +4,10 @@ import { generateECDHKeyPair, exportPublicKey, exportPrivateKey, importPublicKey
 import { getToken, saveSessionKeys, loadSessionKeys } from '../config.js';
 import { connectToServer, registerSession } from '../server/connection.js';
 import { SessionWatcher, getSessionDisplayName, isValidEngine } from '../session-manager.js';
-import { ClaudeSessionWatcher } from '../utils/session-watcher.js';
+import { createSessionTranscriptWatcher } from '../utils/session-watcher.js';
+function stripAnsi(input) {
+    return input.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
+}
 /**
  * AI CLI 세션 시작 (Happy 스타일 심플 래퍼)
  */
@@ -16,7 +19,9 @@ export async function startSession(command = 'claude', options = {}) {
     }
     console.log(`Pocket AI - ${command} 세션을 시작합니다...`);
     const cwd = process.cwd();
-    const existingKeys = loadSessionKeys(cwd);
+    const engine = command.trim().toLowerCase();
+    const isClaudeEngine = engine === 'claude';
+    const existingKeys = loadSessionKeys(cwd, engine);
     // 1. Session Key 로드/생성 (안정적인 메시지 암호화용 — registerNewSession보다 먼저 필요)
     let sessionKey;
     if (existingKeys?.sessionKey) {
@@ -53,14 +58,14 @@ export async function startSession(command = 'claude', options = {}) {
             console.log('기존 키 복원 실패, 새 세션을 생성합니다...');
             keyPair = await generateECDHKeyPair();
             publicKeyBase64 = await exportPublicKey(keyPair.publicKey);
-            sessionId = await registerNewSession(publicKeyBase64, command, cwd, keyPair);
+            sessionId = await registerNewSession(publicKeyBase64, engine, cwd, keyPair);
         }
     }
     else {
         // 새 키쌍 생성
         keyPair = await generateECDHKeyPair();
         publicKeyBase64 = await exportPublicKey(keyPair.publicKey);
-        sessionId = await registerNewSession(publicKeyBase64, command, cwd, keyPair);
+        sessionId = await registerNewSession(publicKeyBase64, engine, cwd, keyPair);
     }
     // 세션이 서버에 존재하는지 확인하고, 없으면 재등록
     try {
@@ -85,7 +90,7 @@ export async function startSession(command = 'claude', options = {}) {
             privateKey: privateKeyBase64,
             sessionId: newSessionId,
             sessionKey: sessionKeyBase64,
-        });
+        }, cmd);
         console.log('[Pocket AI] 암호화 키 저장 완료 (이력 복원용)');
         return newSessionId;
     }
@@ -111,7 +116,7 @@ export async function startSession(command = 'claude', options = {}) {
     let sharedSecret = null;
     // JSONL session watcher — reads Claude Code's native transcript file
     // instead of parsing fragile PTY/ANSI output
-    const sessionWatcher = new ClaudeSessionWatcher(process.cwd(), (events) => {
+    const sessionWatcher = createSessionTranscriptWatcher(engine, process.cwd(), (events) => {
         if (sessionKey && socket) {
             for (const event of events) {
                 encrypt(JSON.stringify(event), sessionKey)
@@ -126,9 +131,25 @@ export async function startSession(command = 'claude', options = {}) {
             }
         }
     });
-    sessionWatcher.start();
+    sessionWatcher?.start();
+    const shouldRelayPtyText = !sessionWatcher;
     shell.onData((data) => {
         process.stdout.write(data); // 로컬 터미널은 raw ANSI 그대로 (변경 없음)
+        // Claude 외 엔진(codex/gemini)은 PTY 출력을 그대로 원격으로 중계
+        if (shouldRelayPtyText && socket && sessionKey) {
+            const plainText = stripAnsi(data).replace(/\r/g, '');
+            if (!plainText.trim())
+                return;
+            encrypt(JSON.stringify({ t: 'text', text: plainText }), sessionKey)
+                .then((encrypted) => {
+                socket.emit('update', {
+                    sessionId,
+                    sender: 'cli',
+                    body: encrypted,
+                });
+            })
+                .catch(() => { });
+        }
     });
     // Handle local keyboard input
     if (process.stdin.isTTY) {
@@ -145,14 +166,14 @@ export async function startSession(command = 'claude', options = {}) {
     // Handle CLI process exit
     shell.onExit(({ exitCode }) => {
         console.log(`\nAI CLI 프로세스가 종료되었습니다 (code: ${exitCode})`);
-        sessionWatcher.destroy();
+        sessionWatcher?.destroy();
         if (socket)
             socket.disconnect();
         process.exit(exitCode);
     });
     // 6. Connect to relay server
     if (options.remote !== false) {
-        const sessionMetadata = { hostname: os.hostname(), engine: command, cwd: process.cwd() };
+        const sessionMetadata = { hostname: os.hostname(), engine, cwd: process.cwd() };
         socket = connectToServer({
             sessionId,
             publicKey: publicKeyBase64,
@@ -166,7 +187,7 @@ export async function startSession(command = 'claude', options = {}) {
                     privateKey: privateKeyBase64,
                     sessionId: newSessionId,
                     sessionKey: sessionKeyBase64,
-                });
+                }, engine);
                 console.log(`[Pocket AI] 세션 재등록 완료: ${newSessionId.slice(0, 8)}...`);
             },
             onAuthSuccess: (data) => {
@@ -203,7 +224,7 @@ export async function startSession(command = 'claude', options = {}) {
                             // Claude Code's Ink TUI treats "text\r" as one chunk → \r becomes newline
                             // Physical keyboard sends Enter (\r) as a SEPARATE keypress event → submit
                             // Fix: separate text from \r and send with delay to simulate real typing
-                            if (text.endsWith('\r') || text.endsWith('\n')) {
+                            if (isClaudeEngine && (text.endsWith('\r') || text.endsWith('\n'))) {
                                 const content = text.slice(0, -1);
                                 if (content)
                                     shell.write(content);
@@ -225,7 +246,7 @@ export async function startSession(command = 'claude', options = {}) {
         });
     }
     // 7. Happy 스타일 폴더 변경 감지 (선택적 기능)
-    const watcher = new SessionWatcher(command);
+    const watcher = new SessionWatcher(engine);
     watcher.onCwdChange((oldKey, newKey) => {
         console.log(`\n[Pocket AI] 폴더 변경 감지: ${getSessionDisplayName(oldKey)} → ${getSessionDisplayName(newKey)}`);
         console.log('현재 세션을 계속 사용합니다. 새 세션을 시작하려면 Ctrl+C 후 pocket-ai를 다시 실행하세요.\n');
@@ -258,7 +279,7 @@ export async function startSession(command = 'claude', options = {}) {
     // Graceful shutdown
     const cleanup = () => {
         watcher.stop();
-        sessionWatcher.destroy();
+        sessionWatcher?.destroy();
         shell.kill();
         if (socket)
             socket.disconnect();

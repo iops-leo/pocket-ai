@@ -106,7 +106,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
         return { success: true, data: { sessionId } };
     });
 
-    // GET /api/sessions: PWA가 온라인 세션 목록 조회
+    // GET /api/sessions: PWA/CLI가 사용자 세션 목록 조회 (online/offline 모두)
     fastify.get('/', async (request, reply) => {
         const token = request.headers.authorization?.replace('Bearer ', '');
         if (!token) return reply.code(401).send({ error: 'Missing token' });
@@ -120,7 +120,13 @@ export async function sessionRoutes(fastify: FastifyInstance) {
 
         const userId = decoded.sub;
         const userSessions = Array.from(activeSessions.values())
-            .filter(s => s.userId === userId && s.status === 'online')
+            .filter(s => s.userId === userId)
+            .sort((a, b) => {
+                if (a.status !== b.status) {
+                    return a.status === 'online' ? -1 : 1; // online 우선
+                }
+                return b.sessionId.localeCompare(a.sessionId);
+            })
             .map(s => ({
                 sessionId: s.sessionId,
                 publicKey: s.publicKey,
@@ -129,6 +135,57 @@ export async function sessionRoutes(fastify: FastifyInstance) {
             }));
 
         return { success: true, data: userSessions };
+    });
+
+    // GET /api/sessions/recent-paths: 사용자의 최근 작업 경로 조회
+    fastify.get<{
+        Querystring: { limit?: string };
+    }>('/recent-paths', async (request, reply) => {
+        const token = request.headers.authorization?.replace('Bearer ', '');
+        if (!token) return reply.code(401).send({ error: 'Missing token' });
+
+        let decoded: any;
+        try {
+            decoded = fastify.jwt.verify(token);
+        } catch {
+            return reply.code(401).send({ error: 'Invalid token' });
+        }
+
+        const userId = decoded.sub;
+        const limit = Math.min(Math.max(parseInt(request.query.limit || '8', 10), 1), 20);
+
+        const rows = await db
+            .selectFrom('sessions')
+            .select(['metadata', 'created_at'])
+            .where('user_id', '=', userId)
+            .orderBy('created_at', 'desc')
+            .execute();
+
+        const recentPaths: string[] = [];
+        const seen = new Set<string>();
+
+        for (const row of rows) {
+            let parsedMetadata: any = row.metadata;
+            if (typeof row.metadata === 'string') {
+                try {
+                    parsedMetadata = JSON.parse(row.metadata);
+                } catch {
+                    parsedMetadata = {};
+                }
+            }
+            const cwd = typeof parsedMetadata?.cwd === 'string'
+                ? parsedMetadata.cwd.trim()
+                : '';
+
+            if (!cwd || seen.has(cwd)) continue;
+
+            seen.add(cwd);
+            recentPaths.push(cwd);
+
+            if (recentPaths.length >= limit) break;
+        }
+
+        return { success: true, data: recentPaths };
     });
 
     // GET /api/sessions/:id/messages: 세션 메시지 이력 조회 (암호화된 상태)

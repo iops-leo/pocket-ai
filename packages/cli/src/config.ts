@@ -23,8 +23,8 @@ const config = new Conf<PocketAIConfig>({
 });
 
 // CWD를 해시로 변환 (키 저장용)
-function hashCwd(cwd: string): string {
-  return crypto.createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+function hashSessionScope(cwd: string, engine: string): string {
+  return crypto.createHash('sha256').update(`${cwd}::${engine}`).digest('hex').slice(0, 16);
 }
 
 export function getToken(): string | undefined {
@@ -48,24 +48,28 @@ export function setServerUrl(url: string): void {
 }
 
 // 세션 키 저장 (Happy 방식: 동일 cwd에서 재접속 시 동일 키 사용)
-export function saveSessionKeys(cwd: string, keys: SessionKeys): void {
-  const cwdHash = hashCwd(cwd);
+export function saveSessionKeys(cwd: string, keys: SessionKeys, engine: string = 'claude'): void {
+  const cwdHash = hashSessionScope(cwd, engine);
   const sessionKeys = config.get('sessionKeys') || {};
   sessionKeys[cwdHash] = keys;
   config.set('sessionKeys', sessionKeys);
 }
 
 // 세션 키 로드
-export function loadSessionKeys(cwd: string): SessionKeys | null {
-  const cwdHash = hashCwd(cwd);
+export function loadSessionKeys(cwd: string, engine: string = 'claude'): SessionKeys | null {
+  const cwdHash = hashSessionScope(cwd, engine);
   const sessionKeys = config.get('sessionKeys') || {};
-  return sessionKeys[cwdHash] || null;
+  // Backward compatibility: old versions keyed by cwd only.
+  const legacyCwdHash = crypto.createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+  return sessionKeys[cwdHash] || sessionKeys[legacyCwdHash] || null;
 }
 
 // 세션 키 삭제
-export function clearSessionKeys(cwd: string): void {
-  const cwdHash = hashCwd(cwd);
+export function clearSessionKeys(cwd: string, engine: string = 'claude'): void {
+  const cwdHash = hashSessionScope(cwd, engine);
   const sessionKeys = config.get('sessionKeys') || {};
   delete sessionKeys[cwdHash];
+  const legacyCwdHash = crypto.createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+  delete sessionKeys[legacyCwdHash];
   config.set('sessionKeys', sessionKeys);
 }

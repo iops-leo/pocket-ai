@@ -49,6 +49,12 @@
     "createFailed": "Failed to create session",
     "creating": "Creating...",
     "createSession": "Create Session",
+    "recentPaths": "Recent paths",
+    "recentPathsAll": "All",
+    "recentPathsEmpty": "No recent paths for this filter",
+    "pinPath": "Pin",
+    "unpinPath": "Unpin",
+    "removePath": "Remove from list",
     "newSessionHint1": "You can also start a session directly from your PC terminal:",
     "selectSession": "Select a Session",
     "selectSessionHint": "Choose a session from the list on the left"

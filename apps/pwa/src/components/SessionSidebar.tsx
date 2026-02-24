@@ -32,13 +32,22 @@ function getShortPath(cwd?: string): string {
     return parts.slice(-2).join('/');
 }
 
-function getEngineColor(engine?: string): string {
+function getEngineBadgeClass(engine?: string): string {
     switch (engine?.toLowerCase()) {
-        case 'claude': return 'bg-orange-500';
-        case 'gemini': return 'bg-blue-500';
-        case 'codex': return 'bg-emerald-500';
-        default: return 'bg-gray-500';
+        case 'claude': return 'bg-orange-500/15 text-orange-300 border-orange-500/30';
+        case 'gemini': return 'bg-blue-500/15 text-blue-300 border-blue-500/30';
+        case 'codex': return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+        default: return 'bg-gray-500/15 text-gray-300 border-gray-500/30';
     }
+}
+
+function getEngineLabel(engine?: string): string {
+    if (!engine) return 'Unknown';
+    const normalized = engine.toLowerCase();
+    if (normalized === 'claude') return 'Claude';
+    if (normalized === 'gemini') return 'Gemini';
+    if (normalized === 'codex') return 'Codex';
+    return engine;
 }
 
 export function SessionSidebar({
@@ -278,7 +287,12 @@ function SessionItem({
                     <span className="font-medium text-sm text-white truncate">
                         {session.metadata?.hostname || 'Unknown Host'}
                     </span>
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${getEngineColor(session.metadata?.engine)}`} title={session.metadata?.engine} />
+                    <span
+                        className={`px-1.5 py-0.5 text-[10px] rounded-md border font-medium flex-shrink-0 ${getEngineBadgeClass(session.metadata?.engine)}`}
+                        title={`Engine: ${getEngineLabel(session.metadata?.engine)}`}
+                    >
+                        {getEngineLabel(session.metadata?.engine)}
+                    </span>
                 </div>
 
                 {shortPath && (
