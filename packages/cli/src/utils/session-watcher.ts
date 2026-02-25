@@ -263,6 +263,7 @@ export class CodexSessionWatcher implements SessionTranscriptWatcher {
     private destroyed = false;
     private pollTimeout: ReturnType<typeof setTimeout> | null = null;
     private syntheticCallIndex = 0;
+    private seenLineHashes = new Set<string>();
 
     constructor(cwd: string, onEvent: (events: SessionPayload[]) => void) {
         this.cwd = path.resolve(cwd);
@@ -411,6 +412,11 @@ export class CodexSessionWatcher implements SessionTranscriptWatcher {
             for (const line of buf.toString('utf-8').split('\n')) {
                 const trimmed = line.trim();
                 if (!trimmed) continue;
+
+                // 중복 방지: 동일한 라인은 한 번만 처리 (Codex가 파일을 rewrite할 때 방지)
+                const lineHash = crypto.createHash('sha1').update(trimmed).digest('hex');
+                if (this.seenLineHashes.has(lineHash)) continue;
+                this.seenLineHashes.add(lineHash);
 
                 const events = this.processLine(trimmed);
                 if (events.length > 0) this.onEvent(events);
