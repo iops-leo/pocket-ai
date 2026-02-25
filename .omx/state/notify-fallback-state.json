@@ -1,0 +1,9 @@
+{
+  "pid": 93577,
+  "started_at": "2026-02-24T12:30:53.275Z",
+  "cwd": "/Users/leo/project/pocket-ai",
+  "notify_script": "/Users/leo/.npm-global/lib/node_modules/oh-my-codex/scripts/notify-hook.js",
+  "poll_ms": 700,
+  "tracked_files": 2,
+  "seen_turns": 1
+}

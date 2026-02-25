@@ -154,6 +154,13 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
             socket.to(`session_${sessionId}`).emit('session-key', payload);
         });
 
+        // 3.6. `slash-commands`: CLI의 슬래시 명령어 목록을 PWA에 중계
+        socket.on('slash-commands', (payload: any) => {
+            const { sessionId } = payload;
+            if (!sessionId || !socket.rooms.has(`session_${sessionId}`)) return;
+            socket.to(`session_${sessionId}`).emit('slash-commands', payload);
+        });
+
         // 4. `update`: 암호화 메시지 중계 + DB 저장 (서버는 복호화하지 않음)
         socket.on('update', async (payload: any) => {
             const { sessionId, sender, body } = payload;

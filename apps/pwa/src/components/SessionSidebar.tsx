@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, Plus, ChevronLeft, FolderOpen, Settings } from 'lucide-react';
+import { Search, Plus, ChevronLeft, FolderOpen, Settings, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
@@ -21,6 +21,7 @@ interface SessionSidebarProps {
     sessions: Session[];
     activeSessionId: string | null;
     onSelectSession: (sessionId: string) => void;
+    onDeleteSession: (sessionId: string) => void;
     onNewSession: () => void;
     isCollapsed?: boolean;
     onToggleCollapse?: () => void;
@@ -54,6 +55,7 @@ export function SessionSidebar({
     sessions,
     activeSessionId,
     onSelectSession,
+    onDeleteSession,
     onNewSession,
     isCollapsed = false,
     onToggleCollapse,
@@ -92,11 +94,10 @@ export function SessionSidebar({
                     <button
                         key={session.sessionId}
                         onClick={() => onSelectSession(session.sessionId)}
-                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
-                            activeSessionId === session.sessionId
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${activeSessionId === session.sessionId
                                 ? 'bg-blue-600 text-white'
                                 : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
-                        }`}
+                            }`}
                         title={session.metadata?.hostname || session.sessionId.slice(0, 8)}
                     >
                         <span className="text-xs font-mono font-bold">
@@ -165,11 +166,10 @@ export function SessionSidebar({
                         <button
                             key={engine}
                             onClick={() => setEngineFilter(engine)}
-                            className={`flex-1 px-2 py-1.5 text-xs rounded-md transition-colors ${
-                                engineFilter === engine
+                            className={`flex-1 px-2 py-1.5 text-xs rounded-md transition-colors ${engineFilter === engine
                                     ? 'bg-blue-600 text-white'
                                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                            }`}
+                                }`}
                         >
                             {engine === 'all' ? t('allEngines') : engine.charAt(0).toUpperCase() + engine.slice(1)}
                         </button>
@@ -192,6 +192,7 @@ export function SessionSidebar({
                                 session={session}
                                 isActive={activeSessionId === session.sessionId}
                                 onClick={() => onSelectSession(session.sessionId)}
+                                onDelete={() => onDeleteSession(session.sessionId)}
                             />
                         ))}
                     </div>
@@ -210,6 +211,7 @@ export function SessionSidebar({
                                 session={session}
                                 isActive={activeSessionId === session.sessionId}
                                 onClick={() => onSelectSession(session.sessionId)}
+                                onDelete={() => onDeleteSession(session.sessionId)}
                                 disabled
                             />
                         ))}
@@ -254,58 +256,103 @@ function SessionItem({
     session,
     isActive,
     onClick,
+    onDelete,
     disabled = false,
 }: {
     session: Session;
     isActive: boolean;
     onClick: () => void;
+    onDelete: () => void;
     disabled?: boolean;
 }) {
+    const t = useTranslations('dashboard');
+    const [showConfirm, setShowConfirm] = useState(false);
     const isOnline = session.status === 'online';
     const shortPath = getShortPath(session.metadata?.cwd);
 
     return (
-        <button
-            onClick={onClick}
-            disabled={disabled}
-            className={`w-full px-4 py-3 flex items-start gap-3 transition-all ${
-                isActive
-                    ? 'bg-blue-600/20 border-l-2 border-blue-500'
-                    : disabled
-                        ? 'opacity-50 cursor-not-allowed'
-                        : 'hover:bg-gray-800/50 border-l-2 border-transparent'
-            }`}
-        >
-            {/* Status indicator */}
-            <div className="flex-shrink-0 mt-1">
-                <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-gray-600'}`} />
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 min-w-0 text-left">
-                <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm text-white truncate">
-                        {session.metadata?.hostname || 'Unknown Host'}
-                    </span>
-                    <span
-                        className={`px-1.5 py-0.5 text-[10px] rounded-md border font-medium flex-shrink-0 ${getEngineBadgeClass(session.metadata?.engine)}`}
-                        title={`Engine: ${getEngineLabel(session.metadata?.engine)}`}
-                    >
-                        {getEngineLabel(session.metadata?.engine)}
-                    </span>
+        <div className="relative group">
+            <button
+                onClick={onClick}
+                disabled={disabled}
+                className={`w-full px-4 py-3 flex items-start gap-3 transition-all ${isActive
+                        ? 'bg-blue-600/20 border-l-2 border-blue-500'
+                        : disabled
+                            ? 'opacity-50 cursor-not-allowed'
+                            : 'hover:bg-gray-800/50 border-l-2 border-transparent'
+                    }`}
+            >
+                {/* Status indicator */}
+                <div className="flex-shrink-0 mt-1">
+                    <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-gray-600'}`} />
                 </div>
 
-                {shortPath && (
-                    <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500 truncate">
-                        <FolderOpen size={10} className="flex-shrink-0" />
-                        <span className="truncate font-mono">{shortPath}</span>
+                {/* Content */}
+                <div className="flex-1 min-w-0 text-left">
+                    <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm text-white truncate">
+                            {session.metadata?.hostname || 'Unknown Host'}
+                        </span>
+                        <span
+                            className={`px-1.5 py-0.5 text-[10px] rounded-md border font-medium flex-shrink-0 ${getEngineBadgeClass(session.metadata?.engine)}`}
+                            title={`Engine: ${getEngineLabel(session.metadata?.engine)}`}
+                        >
+                            {getEngineLabel(session.metadata?.engine)}
+                        </span>
                     </div>
-                )}
 
-                <div className="text-xs text-gray-600 mt-0.5 font-mono">
-                    {session.sessionId.slice(0, 8)}
+                    {shortPath && (
+                        <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500 truncate">
+                            <FolderOpen size={10} className="flex-shrink-0" />
+                            <span className="truncate font-mono">{shortPath}</span>
+                        </div>
+                    )}
+
+                    <div className="text-xs text-gray-600 mt-0.5 font-mono">
+                        {session.sessionId.slice(0, 8)}
+                    </div>
                 </div>
-            </div>
-        </button>
+            </button>
+
+            {/* Delete button - appears on hover */}
+            {!showConfirm && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setShowConfirm(true);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-gray-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                    title={t('deleteSession')}
+                >
+                    <Trash2 size={14} />
+                </button>
+            )}
+
+            {/* Delete confirmation */}
+            {showConfirm && (
+                <div className="absolute inset-0 bg-gray-900/95 flex items-center justify-center gap-2 px-3 z-10">
+                    <span className="text-xs text-gray-300 flex-1 truncate">{t('deleteSessionConfirm')}</span>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setShowConfirm(false);
+                            onDelete();
+                        }}
+                        className="px-2.5 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded-md font-medium transition-colors flex-shrink-0"
+                    >
+                        {t('deleteSession')}
+                    </button>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setShowConfirm(false);
+                        }}
+                        className="px-2.5 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md font-medium transition-colors flex-shrink-0"
+                    >
+                        {t('cancel')}
+                    </button>
+                </div>
+            )}
+        </div>
     );
 }

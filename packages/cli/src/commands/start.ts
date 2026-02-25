@@ -9,6 +9,7 @@ import { connectToServer, registerSession } from '../server/connection.js';
 import type { Socket } from 'socket.io-client';
 import { SessionWatcher, getSessionDisplayName, isValidEngine } from '../session-manager.js';
 import { createSessionTranscriptWatcher } from '../utils/session-watcher.js';
+import { collectSlashCommands } from '../utils/slash-commands.js';
 
 interface StartOptions {
   remote?: boolean;
@@ -306,6 +307,17 @@ export async function startSession(command: string = 'claude', options: StartOpt
       onAuthSuccess: (data) => {
         console.log(`서버 연결 완료 (세션: ${data.sessionId.slice(0, 8)}...)`);
         console.log('원격 접속 대기 중... (PWA 또는 다른 머신에서 접속 가능)\n');
+
+        // 슬래시 명령어 목록 전송
+        try {
+          const commands = collectSlashCommands(engine, cwd);
+          if (commands.length > 0) {
+            socket!.emit('slash-commands', { sessionId, commands });
+            console.log(`[Pocket AI] 슬래시 명령어 ${commands.length}개 전송 완료`);
+          }
+        } catch {
+          // 스캔 실패는 비치명적
+        }
       },
       onAuthError: (data) => {
         console.error(`서버 인증 실패: ${data.error}`);

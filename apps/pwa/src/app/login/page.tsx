@@ -8,33 +8,24 @@ import { useTranslations } from 'next-intl';
 function LoginContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const [isLoading, setIsLoading] = useState(true);
+    const [isProcessingToken, setIsProcessingToken] = useState(false);
     const [authError, setAuthError] = useState<string | null>(null);
     const t = useTranslations('login');
 
     useEffect(() => {
-        const errorParam = searchParams.get('error');
-        if (errorParam) {
-            setAuthError(errorParam === 'access_denied' ? t('accessDenied') : t('serverError'));
-        }
-
+        // OAuth callback - store token and redirect to dashboard
         const token = searchParams.get('token');
-
         if (token) {
-            // Coming from OAuth callback - store token and clean URL
+            setIsProcessingToken(true);
             localStorage.setItem('pocket_ai_token', token);
             router.replace('/dashboard');
             return;
         }
 
-        // Check if already logged in
-        const existingToken = localStorage.getItem('pocket_ai_token');
-        if (existingToken) {
-            router.replace('/dashboard');
-            return;
+        const errorParam = searchParams.get('error');
+        if (errorParam) {
+            setAuthError(errorParam === 'access_denied' ? t('accessDenied') : t('serverError'));
         }
-
-        setIsLoading(false);
     }, [searchParams, router, t]);
 
     const handleLogin = () => {
@@ -42,11 +33,10 @@ function LoginContent() {
         window.location.href = `${serverUrl}/auth/github`;
     };
 
-    if (isLoading) {
+    if (isProcessingToken) {
         return (
-            <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-4" />
-                <p className="text-gray-400">{t('checkingAccount')}</p>
+            <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
             </div>
         );
     }

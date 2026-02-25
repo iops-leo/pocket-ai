@@ -59,7 +59,12 @@
     "removePath": "Remove from list",
     "newSessionHint1": "You can also start a session directly from your PC terminal:",
     "selectSession": "Select a Session",
-    "selectSessionHint": "Choose a session from the list on the left"
+    "selectSessionHint": "Choose a session from the list on the left",
+    "deleteSession": "Delete Session",
+    "deleteSessionConfirm": "Delete this session? Chat history will also be removed.",
+    "deleteSessionSuccess": "Session deleted",
+    "deleteSessionFailed": "Failed to delete session",
+    "cancel": "Cancel"
   },
   "settings": {
     "title": "Settings",

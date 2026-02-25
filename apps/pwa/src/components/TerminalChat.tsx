@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, History, ArrowUp } from 'lucide-react';
+import { SlashCommandDropdown, type SlashCommand } from './SlashCommandDropdown';
 import { io, Socket } from 'socket.io-client';
 import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt, unwrapSessionKey, type EncryptedData, type MessagesResponse } from '@pocket-ai/wire';
 import { MessageList, type ChatMessage } from './MessageList';
@@ -23,6 +24,16 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const [isAiThinking, setIsAiThinking] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [historyLoaded, setHistoryLoaded] = useState(false);
+
+    // 슬래시 명령어
+    const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(() => {
+        if (typeof window === 'undefined') return [];
+        try {
+            const cached = localStorage.getItem(`pocket_ai_slash_${sessionId}`);
+            return cached ? JSON.parse(cached) : [];
+        } catch { return []; }
+    });
+    const [showSlashDropdown, setShowSlashDropdown] = useState(false);
 
     const sharedSecretRef = useRef<CryptoKey | null>(null);
     const sessionKeyRef = useRef<CryptoKey | null>(null);
@@ -249,6 +260,17 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
             }
         });
 
+        // 슬래시 명령어 수신
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        socket.on('slash-commands', (payload: any) => {
+            if (Array.isArray(payload?.commands)) {
+                setSlashCommands(payload.commands);
+                try {
+                    localStorage.setItem(`pocket_ai_slash_${sessionId}`, JSON.stringify(payload.commands));
+                } catch { /* 저장 실패 무시 */ }
+            }
+        });
+
         return () => {
             socket.disconnect();
             if (disconnectTimerRef.current) {
@@ -286,6 +308,9 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
     // 텍스트에어리어: Enter = 전송, Shift+Enter = 줄바꿈
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        // 슬래시 드롭다운이 열려 있으면 키보드 이벤트는 드롭다운이 처리
+        if (showSlashDropdown) return;
+
         if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             handleSend();
@@ -459,8 +484,22 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                 <MessageList messages={messages} isAiThinking={isAiThinking} onOptionSelect={handleOptionSelect} />
 
                 {/* 입력 영역 */}
-                <div className="flex-none bg-gray-950 w-full border-t border-gray-800/60">
+                <div className="flex-none bg-gray-950 w-full border-t border-gray-800/60 relative">
 
+                    {/* 슬래시 명령어 드롭다운 */}
+                    {slashCommands.length > 0 && (
+                        <SlashCommandDropdown
+                            commands={slashCommands}
+                            inputValue={inputValue}
+                            onSelect={(cmd) => {
+                                setInputValue(cmd + ' ');
+                                setShowSlashDropdown(false);
+                                textareaRef.current?.focus();
+                            }}
+                            onClose={() => setShowSlashDropdown(false)}
+                            visible={showSlashDropdown}
+                        />
+                    )}
 
                     {/* 입력창 */}
                     <div className="max-w-3xl mx-auto w-full px-3 pb-4 sm:pb-5 pt-3 flex items-center gap-2">
@@ -470,8 +509,15 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                                 rows={1}
                                 value={inputValue}
                                 onChange={(e) => {
-                                    setInputValue(e.target.value);
+                                    const val = e.target.value;
+                                    setInputValue(val);
                                     adjustTextareaHeight();
+                                    // "/" 로 시작하면 드롭다운 표시
+                                    if (val.startsWith('/') && slashCommands.length > 0) {
+                                        setShowSlashDropdown(true);
+                                    } else {
+                                        setShowSlashDropdown(false);
+                                    }
                                 }}
                                 onKeyDown={handleKeyDown}
                                 placeholder={t('inputPlaceholder')}

@@ -248,6 +248,41 @@ export default function DashboardPage() {
         await fetchSessions(false);
     };
 
+    const handleDeleteSession = async (sessionId: string) => {
+        const token = localStorage.getItem('pocket_ai_token');
+        if (!token) {
+            router.replace('/login');
+            return;
+        }
+
+        try {
+            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const res = await fetch(`${serverUrl}/api/sessions/${sessionId}`, {
+                method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (res.status === 401) {
+                localStorage.removeItem('pocket_ai_token');
+                router.replace('/login');
+                return;
+            }
+
+            const data = await res.json();
+            if (data.success) {
+                // 로컬 상태에서 즉시 제거
+                setSessions(prev => prev.filter(s => s.sessionId !== sessionId));
+                if (activeSession === sessionId) {
+                    setActiveSession(null);
+                }
+            }
+        } catch {
+            // 삭제 실패는 조용히 처리
+        }
+    };
+
     // Loading state
     if (isLoading) {
         return (
@@ -295,6 +330,7 @@ export default function DashboardPage() {
                     sessions={sessions}
                     activeSessionId={activeSession}
                     onSelectSession={handleSelectSession}
+                    onDeleteSession={handleDeleteSession}
                     onNewSession={() => setShowNewSessionModal(true)}
                     isCollapsed={isSidebarCollapsed}
                     onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}

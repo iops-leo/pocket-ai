@@ -216,6 +216,60 @@ export async function sessionRoutes(fastify: FastifyInstance) {
         return { success: true, data: recentPaths };
     });
 
+    // DELETE /api/sessions/:id: 세션 삭제
+    fastify.delete<{
+        Params: { id: string };
+    }>('/:id', async (request, reply) => {
+        const token = request.headers.authorization?.replace('Bearer ', '');
+        if (!token) return reply.code(401).send({ error: 'Missing token' });
+
+        let decoded: any;
+        try {
+            decoded = fastify.jwt.verify(token);
+        } catch {
+            return reply.code(401).send({ error: 'Invalid token' });
+        }
+
+        const sessionId = request.params.id;
+        const userId = decoded.sub;
+
+        // 소유권 확인: 메모리 캐시 또는 DB
+        const memSession = activeSessions.get(sessionId);
+        if (memSession) {
+            if (memSession.userId !== userId) {
+                return reply.code(403).send({ error: 'Unauthorized' });
+            }
+        } else {
+            const dbSession = await db
+                .selectFrom('sessions')
+                .select(['user_id'])
+                .where('id', '=', sessionId)
+                .executeTakeFirst();
+
+            if (!dbSession) {
+                return reply.code(404).send({ error: 'Session not found' });
+            }
+            if (dbSession.user_id !== userId) {
+                return reply.code(403).send({ error: 'Unauthorized' });
+            }
+        }
+
+        // 온라인 세션이면 CLI에 종료 알림
+        if (memSession?.status === 'online') {
+            const io = (fastify as any).io;
+            io?.to(`session_${sessionId}`).emit('session-killed', { sessionId });
+        }
+
+        // DB에서 메시지 먼저 삭제 후 세션 삭제
+        await db.deleteFrom('messages').where('session_id', '=', sessionId).execute();
+        await db.deleteFrom('sessions').where('id', '=', sessionId).execute();
+
+        // 메모리에서 제거
+        activeSessions.delete(sessionId);
+
+        return { success: true };
+    });
+
     // GET /api/sessions/:id/messages: 세션 메시지 이력 조회 (암호화된 상태)
     fastify.get<{
         Params: { id: string };
