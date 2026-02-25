@@ -75,7 +75,13 @@ export async function authRoutes(fastify: FastifyInstance) {
                     .execute();
             }
 
-            const appToken = fastify.jwt.sign({ sub: user.id, email: user.email }, { expiresIn: '7d' });
+            const appToken = fastify.jwt.sign({
+                sub: user.id,
+                email: user.email,
+                name: githubUser.name || githubUser.login,
+                login: githubUser.login,
+                avatar_url: githubUser.avatar_url,
+            }, { expiresIn: '7d' });
 
             // CLI 로그인: state에 포트가 인코딩된 경우 로컬 서버로 리다이렉트
             const rawState = (request.query as any)?.state as string || '';

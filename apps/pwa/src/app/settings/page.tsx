@@ -1,10 +1,31 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Copy, User, LogOut, Loader2, Check, ArrowLeft, Globe } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Copy, LogOut, Loader2, Check, ArrowLeft, Globe, Github, Key, Eye, EyeOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { useTranslations } from 'next-intl';
 import { useLocale } from '@/i18n/client';
+
+interface JwtPayload {
+    sub: string;
+    email: string;
+    name?: string;
+    login?: string;
+    avatar_url?: string;
+    exp?: number;
+}
+
+function decodeJwtPayload(token: string): JwtPayload | null {
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return payload;
+    } catch {
+        return null;
+    }
+}
 
 export default function SettingsPage() {
     const router = useRouter();
@@ -13,6 +34,7 @@ export default function SettingsPage() {
     const [locale, setLocale] = useLocale();
     const [token, setToken] = useState<string | null>(null);
     const [isCopied, setIsCopied] = useState(false);
+    const [showToken, setShowToken] = useState(false);
 
     useEffect(() => {
         const storedToken = localStorage.getItem('pocket_ai_token');
@@ -22,6 +44,11 @@ export default function SettingsPage() {
         }
         setToken(storedToken);
     }, [router]);
+
+    const profile = useMemo(() => {
+        if (!token) return null;
+        return decodeJwtPayload(token);
+    }, [token]);
 
     const handleCopy = async () => {
         if (token) {
@@ -49,50 +76,84 @@ export default function SettingsPage() {
                 <h1 className="text-2xl font-bold text-white">{t('title')}</h1>
             </header>
 
-            <main className="max-w-4xl mx-auto space-y-8">
+            <main className="max-w-4xl mx-auto space-y-6">
+                {/* GitHub 프로필 */}
                 <section className="p-6 border border-gray-800 rounded-2xl bg-gray-900 shadow-sm">
-                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <User size={20} className="text-gray-400" />
+                    <h2 className="text-lg font-semibold mb-5 flex items-center gap-2">
+                        <Github size={20} className="text-gray-400" />
                         {t('profile')}
                     </h2>
                     <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700">
-                            <User size={32} className="text-gray-500" />
-                        </div>
-                        <div>
-                            <p className="text-lg font-medium text-white">{t('defaultProfile')}</p>
-                            <p className="text-sm text-gray-400">{t('authenticatedBrowser')}</p>
+                        {profile?.avatar_url ? (
+                            <Image
+                                src={profile.avatar_url}
+                                alt={profile.name || profile.login || ''}
+                                width={56}
+                                height={56}
+                                className="rounded-full border-2 border-gray-700 shadow-lg"
+                                unoptimized
+                            />
+                        ) : (
+                            <div className="w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700">
+                                <Github size={24} className="text-gray-500" />
+                            </div>
+                        )}
+                        <div className="min-w-0">
+                            <p className="text-lg font-medium text-white truncate">
+                                {profile?.name || profile?.login || t('defaultProfile')}
+                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                {profile?.login && (
+                                    <span className="text-sm text-gray-400 font-mono">@{profile.login}</span>
+                                )}
+                                {profile?.email && profile?.login && (
+                                    <span className="text-gray-600">·</span>
+                                )}
+                                {profile?.email && (
+                                    <span className="text-sm text-gray-500 truncate">{profile.email}</span>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </section>
 
-                <section className="p-6 border border-yellow-500/20 rounded-2xl bg-gradient-to-br from-gray-900 to-yellow-500/5 shadow-sm">
-                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <span className="text-yellow-400">⚠️</span>
+                {/* CLI 토큰 */}
+                <section className="p-6 border border-gray-800 rounded-2xl bg-gray-900 shadow-sm">
+                    <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                        <Key size={20} className="text-gray-400" />
                         {t('cliToken')}
                     </h2>
-                    <p className="text-sm text-gray-400 mb-4">
-                        {t('cliTokenWarning', { command: 'pocket-ai login' })}
+                    <p className="text-sm text-gray-500 mb-4">
+                        {t('cliTokenDescription')}
                     </p>
-                    <div className="bg-gray-950 border border-gray-800 rounded-xl p-4 font-mono text-xs md:text-sm break-all text-gray-300 relative group min-h-[80px] flex items-center justify-center">
-                        {token ? token : <Loader2 className="w-5 h-5 animate-spin text-gray-500" />}
-                    </div>
-                    <div className="mt-5 flex flex-wrap gap-3">
+                    <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 font-mono text-xs text-gray-400 truncate min-w-0">
+                            {token
+                                ? showToken
+                                    ? token
+                                    : '••••••••••••••••••••••••••••••••'
+                                : <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
+                            }
+                        </div>
+                        <button
+                            onClick={() => setShowToken(prev => !prev)}
+                            className="p-2.5 border border-gray-700 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors flex-shrink-0"
+                            title={showToken ? t('hideToken') : t('showToken')}
+                        >
+                            {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
                         <button
                             onClick={handleCopy}
                             disabled={!token}
-                            className="px-5 py-2.5 bg-blue-600 rounded-xl hover:bg-blue-500 transition-colors font-medium flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed text-white"
+                            className="p-2.5 border border-gray-700 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                            title={isCopied ? tc('copied') : t('copyToken')}
                         >
-                            {isCopied ? <Check size={16} /> : <Copy size={16} />}
-                            {isCopied ? tc('copied') : t('copyToken')}
-                        </button>
-                        <button disabled className="px-5 py-2.5 border border-gray-700 rounded-xl hover:bg-gray-800 transition-colors font-medium text-sm text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {t('newToken')}
+                            {isCopied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
                         </button>
                     </div>
                 </section>
 
-                {/* Language Switcher */}
+                {/* 언어 설정 */}
                 <section className="p-6 border border-gray-800 rounded-2xl bg-gray-900 shadow-sm">
                     <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                         <Globe size={20} className="text-gray-400" />
@@ -120,6 +181,7 @@ export default function SettingsPage() {
                     </div>
                 </section>
 
+                {/* 로그아웃 */}
                 <section className="p-6 border border-gray-800 rounded-2xl bg-gray-900 shadow-sm">
                     <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-red-400">
                         <LogOut size={20} />

@@ -23,7 +23,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const [sessionMeta, setSessionMeta] = useState<{ engine?: string; hostname?: string; cwd?: string }>({});
     const [isAiThinking, setIsAiThinking] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-    const [historyLoaded, setHistoryLoaded] = useState(false);
 
     // 슬래시 명령어
     const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(() => {
@@ -42,6 +41,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     // 일시적 disconnect(초기 로딩 등)에서 오버레이 번쩍임 방지용 grace period 타이머
     const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const historyLoadedRef = useRef(false);
+    const loadMessageHistoryRef = useRef<(key: CryptoKey) => Promise<void>>(async () => { });
 
     // 텍스트에어리어 높이 자동 조절
     const adjustTextareaHeight = useCallback(() => {
@@ -52,10 +53,10 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         ta.style.height = Math.min(ta.scrollHeight, maxHeight) + 'px';
     }, []);
 
-    // 메시지 이력 로드
+    // 메시지 이력 로드 (ref 기반으로 의존성 체인 차단)
     const loadMessageHistory = useCallback(async (sharedSecret: CryptoKey) => {
         const token = localStorage.getItem('pocket_ai_token');
-        if (!token || historyLoaded) return;
+        if (!token || historyLoadedRef.current) return;
 
         setIsLoadingHistory(true);
         try {
@@ -101,13 +102,16 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                 setMessages(decryptedMessages);
                 lastSeqRef.current = data.messages[data.messages.length - 1]?.seq;
             }
-            setHistoryLoaded(true);
+            historyLoadedRef.current = true;
         } catch (e) {
             console.error('Failed to load history:', e);
         } finally {
             setIsLoadingHistory(false);
         }
-    }, [sessionId, historyLoaded]);
+    }, [sessionId]);
+
+    // ref 동기화: initConnection에서 항상 최신 함수 사용
+    loadMessageHistoryRef.current = loadMessageHistory;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const initConnection = useCallback(async (socket: Socket) => {
@@ -140,13 +144,13 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                         try {
                             if (!sharedSecretRef.current) throw new Error('No shared secret');
                             sessionKeyRef.current = await unwrapSessionKey(skPayload.wrappedKey, sharedSecretRef.current);
-                            loadMessageHistory(sessionKeyRef.current);
+                            loadMessageHistoryRef.current(sessionKeyRef.current);
                             setIsConnecting(false);
                             setIsDisconnected(false);
                         } catch (e) {
                             console.error('[Pocket AI] Session key unwrap 실패:', e);
                             sessionKeyRef.current = sharedSecretRef.current;
-                            loadMessageHistory(sharedSecretRef.current!);
+                            loadMessageHistoryRef.current(sharedSecretRef.current!);
                             setIsConnecting(false);
                             setIsDisconnected(false);
                         }
@@ -155,7 +159,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     setTimeout(() => {
                         if (!sessionKeyRef.current && sharedSecretRef.current) {
                             sessionKeyRef.current = sharedSecretRef.current;
-                            loadMessageHistory(sharedSecretRef.current!);
+                            loadMessageHistoryRef.current(sharedSecretRef.current!);
                             setIsConnecting(false);
                             setIsDisconnected(false);
                         }
@@ -185,7 +189,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         } catch (err) {
             console.error(err);
         }
-    }, [sessionId, loadMessageHistory]);
+    }, [sessionId]);
 
     useEffect(() => {
         const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -282,7 +286,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     // 세션 변경 시 상태 초기화
     useEffect(() => {
         setMessages([]);
-        setHistoryLoaded(false);
+        historyLoadedRef.current = false;
         lastSeqRef.current = undefined;
         sessionKeyRef.current = null;
     }, [sessionId]);
