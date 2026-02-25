@@ -95,7 +95,6 @@ export async function startSession(command: string = 'claude', options: StartOpt
 
   const cwd = process.cwd();
   const engine = command.trim().toLowerCase();
-  const isClaudeEngine = engine === 'claude';
 
   const existingKeys = loadSessionKeys(cwd, engine);
 
@@ -335,10 +334,9 @@ export async function startSession(command: string = 'claude', options: StartOpt
             const msg = JSON.parse(decrypted);
             if (msg.t === 'text') {
               const text = msg.text as string;
-              // Claude Code's Ink TUI treats "text\r" as one chunk → \r becomes newline
-              // Physical keyboard sends Enter (\r) as a SEPARATE keypress event → submit
-              // Fix: separate text from \r and send with delay to simulate real typing
-              if (isClaudeEngine && (text.endsWith('\r') || text.endsWith('\n'))) {
+              // 일부 CLI TUI(claude/codex/gemini)는 "text\r"를 한 번에 받으면 Enter submit 대신 줄바꿈으로 처리될 수 있음
+              // 실제 키보드처럼 "텍스트"와 "Enter"를 분리해서 전달
+              if (text.endsWith('\r') || text.endsWith('\n')) {
                 const content = text.slice(0, -1);
                 if (content) shell.write(content);
                 setTimeout(() => shell.write('\r'), 100);
