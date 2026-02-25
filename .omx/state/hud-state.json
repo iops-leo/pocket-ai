@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-02-25T15:31:27.604Z",
-  "turn_count": 23,
-  "last_agent_output": "맞아, 이건 버그였고 지금 원인 잡아서 수정했어.\n\n### 원인\n1) **Gemini 세션 파일 경로가 바뀐 케이스**  \n- 기존: `~/.gemini/tmp/<cwd-hash>"
+  "last_turn_at": "2026-02-25T15:55:27.424Z",
+  "turn_count": 25,
+  "last_agent_output": "완료했어 ✅\n\n- 커밋: `faba35a`\n- 메시지: `feat: improve session reconnect UX and engine-gated creation`\n- 푸시: "
 }
