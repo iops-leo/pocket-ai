@@ -26,7 +26,8 @@
     "step3_prefix": "Run ",
     "step3_code": "pocket-ai",
     "step3_suffix": " to start the daemon, and your PC will appear here.",
-    "e2eNotice": "All communications are end-to-end encrypted with AES-256-GCM"
+    "e2eNotice": "All communications are end-to-end encrypted with AES-256-GCM",
+    "loggingIn": "Signing in..."
   },
   "dashboard": {
     "refresh": "Refresh",

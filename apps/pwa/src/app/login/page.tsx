@@ -13,30 +13,67 @@ function LoginContent() {
     const t = useTranslations('login');
 
     useEffect(() => {
-        // OAuth callback - store token and redirect to dashboard
+        // OAuth callback - store token
         const token = searchParams.get('token');
         if (token) {
             setIsProcessingToken(true);
             localStorage.setItem('pocket_ai_token', token);
+
+            // 팝업/새탭에서 열린 경우: 원래 탭에 알리고 이 창 닫기
+            try {
+                const bc = new BroadcastChannel('pocket_ai_auth');
+                bc.postMessage({ type: 'login_success', token });
+                bc.close();
+            } catch {
+                // BroadcastChannel 미지원 브라우저 (fallback: 그냥 redirect)
+            }
+
+            // opener가 있으면 (window.open으로 열린 경우) 닫기 시도
+            if (window.opener) {
+                window.close();
+                return;
+            }
+
+            // 그냥 같은 탭이면 대시보드로 이동
             router.replace('/dashboard');
             return;
+        }
+
+        // 원래 탭에서 BroadcastChannel로 로그인 성공 수신 대기
+        let bc: BroadcastChannel | null = null;
+        try {
+            bc = new BroadcastChannel('pocket_ai_auth');
+            bc.onmessage = (event) => {
+                if (event.data?.type === 'login_success') {
+                    bc?.close();
+                    router.replace('/dashboard');
+                }
+            };
+        } catch {
+            // BroadcastChannel 미지원
         }
 
         const errorParam = searchParams.get('error');
         if (errorParam) {
             setAuthError(errorParam === 'access_denied' ? t('accessDenied') : t('serverError'));
         }
+
+        return () => {
+            try { bc?.close(); } catch { /* ignore */ }
+        };
     }, [searchParams, router, t]);
 
     const handleLogin = () => {
         const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        // 같은 탭에서 이동 (가장 호환성 높은 방식)
         window.location.href = `${serverUrl}/auth/github`;
     };
 
     if (isProcessingToken) {
         return (
-            <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+            <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-3">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                <p className="text-gray-400 text-sm">{t('loggingIn')}</p>
             </div>
         );
     }

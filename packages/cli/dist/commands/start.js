@@ -272,17 +272,6 @@ export async function startSession(command = 'claude', options = {}) {
             onAuthSuccess: (data) => {
                 console.log(`서버 연결 완료 (세션: ${data.sessionId.slice(0, 8)}...)`);
                 console.log('원격 접속 대기 중... (PWA 또는 다른 머신에서 접속 가능)\n');
-                // 슬래시 명령어 목록 전송
-                try {
-                    const commands = collectSlashCommands(engine, cwd);
-                    if (commands.length > 0) {
-                        socket.emit('slash-commands', { sessionId, commands });
-                        console.log(`[Pocket AI] 슬래시 명령어 ${commands.length}개 전송 완료`);
-                    }
-                }
-                catch {
-                    // 스캔 실패는 비치명적
-                }
             },
             onAuthError: (data) => {
                 console.error(`서버 인증 실패: ${data.error}`);
@@ -299,6 +288,17 @@ export async function startSession(command = 'claude', options = {}) {
                         wrappedKey,
                     });
                     console.log('[Pocket AI] Session key 전송 완료');
+                    // PWA가 룸에 참여한 후이므로 슬래시 명령어 전송
+                    try {
+                        const commands = collectSlashCommands(engine, cwd);
+                        if (commands.length > 0) {
+                            socket.emit('slash-commands', { sessionId, commands });
+                            console.log(`[Pocket AI] 슬래시 명령어 ${commands.length}개 전송 완료`);
+                        }
+                    }
+                    catch {
+                        // 스캔 실패는 비치명적
+                    }
                 }
                 catch (err) {
                     console.error('[Pocket AI] 키교환 실패:', err);

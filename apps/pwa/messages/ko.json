@@ -26,7 +26,8 @@
     "step3_prefix": "",
     "step3_code": "pocket-ai",
     "step3_suffix": " 로 데몬을 켜면 즉시 이곳에 내 PC가 나타납니다.",
-    "e2eNotice": "모든 통신은 AES-256-GCM으로 종단간 암호화(E2E)됩니다"
+    "e2eNotice": "모든 통신은 AES-256-GCM으로 종단간 암호화(E2E)됩니다",
+    "loggingIn": "로그인 처리 중..."
   },
   "dashboard": {
     "refresh": "새로고침",
