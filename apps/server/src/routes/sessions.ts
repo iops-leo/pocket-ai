@@ -216,6 +216,75 @@ export async function sessionRoutes(fastify: FastifyInstance) {
         return { success: true, data: recentPaths };
     });
 
+    // PATCH /api/sessions/:id: 세션 메타데이터 업데이트 (예: sessionName)
+    fastify.patch<{
+        Params: { id: string };
+        Body: { metadata?: Record<string, unknown> };
+    }>('/:id', async (request, reply) => {
+        const token = request.headers.authorization?.replace('Bearer ', '');
+        if (!token) return reply.code(401).send({ error: 'Missing token' });
+
+        let decoded: any;
+        try {
+            decoded = fastify.jwt.verify(token);
+        } catch {
+            return reply.code(401).send({ error: 'Invalid token' });
+        }
+
+        const sessionId = request.params.id;
+        const incomingMetadata = (request.body?.metadata && typeof request.body.metadata === 'object')
+            ? request.body.metadata
+            : null;
+        if (!incomingMetadata) {
+            return reply.code(400).send({ error: 'Missing metadata' });
+        }
+
+        const dbSession = await db
+            .selectFrom('sessions')
+            .select(['user_id', 'metadata'])
+            .where('id', '=', sessionId)
+            .executeTakeFirst();
+
+        if (!dbSession || dbSession.user_id !== decoded.sub) {
+            return reply.code(403).send({ error: 'Session not found or unauthorized' });
+        }
+
+        let existingMetadata: Record<string, unknown> = {};
+        if (typeof dbSession.metadata === 'string') {
+            try {
+                existingMetadata = JSON.parse(dbSession.metadata);
+            } catch {
+                existingMetadata = {};
+            }
+        } else if (dbSession.metadata && typeof dbSession.metadata === 'object') {
+            existingMetadata = dbSession.metadata as Record<string, unknown>;
+        }
+
+        const mergedMetadata = {
+            ...existingMetadata,
+            ...incomingMetadata,
+        };
+
+        await db
+            .updateTable('sessions')
+            .set({
+                metadata: JSON.stringify(mergedMetadata),
+                updated_at: new Date(),
+            })
+            .where('id', '=', sessionId)
+            .execute();
+
+        const active = activeSessions.get(sessionId);
+        if (active) {
+            active.metadata = {
+                ...(active.metadata ?? {}),
+                ...incomingMetadata,
+            };
+        }
+
+        return { success: true, data: { sessionId, metadata: mergedMetadata } };
+    });
+
     // DELETE /api/sessions/:id: 세션 삭제
     fastify.delete<{
         Params: { id: string };

@@ -14,13 +14,22 @@ interface TerminalChatProps {
     embedded?: boolean;
 }
 
+type SessionMeta = {
+    sessionName?: string;
+    engine?: string;
+    hostname?: string;
+    cwd?: string;
+};
+
+const sessionUiCache = new Map<string, { messages: ChatMessage[]; sessionMeta: SessionMeta }>();
+
 export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalChatProps) {
     const t = useTranslations('chat');
     const [isConnecting, setIsConnecting] = useState(true);
     const [isDisconnected, setIsDisconnected] = useState(false);
     const [inputValue, setInputValue] = useState('');
     const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [sessionMeta, setSessionMeta] = useState<{ engine?: string; hostname?: string; cwd?: string }>({});
+    const [sessionMeta, setSessionMeta] = useState<SessionMeta>({});
     const [isAiThinking, setIsAiThinking] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
@@ -42,7 +51,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     // 일시적 disconnect(초기 로딩 등)에서 오버레이 번쩍임 방지용 grace period 타이머
     const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const historyLoadedRef = useRef(false);
-    const loadMessageHistoryRef = useRef<(key: CryptoKey) => Promise<void>>(async () => { });
+    const hasWarmCacheRef = useRef(false);
+    const loadMessageHistoryRef = useRef<(key: CryptoKey, options?: { silent?: boolean }) => Promise<void>>(async () => { });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const initConnectionRef = useRef<(socket: any) => Promise<void>>(async () => { });
 
@@ -56,11 +66,14 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     }, []);
 
     // 메시지 이력 로드 (ref 기반으로 의존성 체인 차단)
-    const loadMessageHistory = useCallback(async (sharedSecret: CryptoKey) => {
+    const loadMessageHistory = useCallback(async (sharedSecret: CryptoKey, options?: { silent?: boolean }) => {
         const token = localStorage.getItem('pocket_ai_token');
         if (!token || historyLoadedRef.current) return;
 
-        setIsLoadingHistory(true);
+        const silent = Boolean(options?.silent);
+        if (!silent) {
+            setIsLoadingHistory(true);
+        }
         try {
             const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
             const res = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/messages?limit=100`, {
@@ -108,7 +121,9 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         } catch (e) {
             console.error('Failed to load history:', e);
         } finally {
-            setIsLoadingHistory(false);
+            if (!silent) {
+                setIsLoadingHistory(false);
+            }
         }
     }, [sessionId]);
 
@@ -146,13 +161,13 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                         try {
                             if (!sharedSecretRef.current) throw new Error('No shared secret');
                             sessionKeyRef.current = await unwrapSessionKey(skPayload.wrappedKey, sharedSecretRef.current);
-                            loadMessageHistoryRef.current(sessionKeyRef.current);
+                            loadMessageHistoryRef.current(sessionKeyRef.current, { silent: hasWarmCacheRef.current });
                             setIsConnecting(false);
                             setIsDisconnected(false);
                         } catch (e) {
                             console.error('[Pocket AI] Session key unwrap 실패:', e);
                             sessionKeyRef.current = sharedSecretRef.current;
-                            loadMessageHistoryRef.current(sharedSecretRef.current!);
+                            loadMessageHistoryRef.current(sharedSecretRef.current!, { silent: hasWarmCacheRef.current });
                             setIsConnecting(false);
                             setIsDisconnected(false);
                         }
@@ -161,7 +176,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     setTimeout(() => {
                         if (!sessionKeyRef.current && sharedSecretRef.current) {
                             sessionKeyRef.current = sharedSecretRef.current;
-                            loadMessageHistoryRef.current(sharedSecretRef.current!);
+                            loadMessageHistoryRef.current(sharedSecretRef.current!, { silent: hasWarmCacheRef.current });
                             setIsConnecting(false);
                             setIsDisconnected(false);
                         }
@@ -292,11 +307,24 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
     // 세션 변경 시 상태 초기화
     useEffect(() => {
-        setMessages([]);
+        const cached = sessionUiCache.get(sessionId);
+        if (cached) {
+            setMessages(cached.messages);
+            setSessionMeta(cached.sessionMeta);
+            hasWarmCacheRef.current = cached.messages.length > 0;
+        } else {
+            setMessages([]);
+            setSessionMeta({});
+            hasWarmCacheRef.current = false;
+        }
         historyLoadedRef.current = false;
         lastSeqRef.current = undefined;
         sessionKeyRef.current = null;
     }, [sessionId]);
+
+    useEffect(() => {
+        sessionUiCache.set(sessionId, { messages, sessionMeta });
+    }, [messages, sessionId, sessionMeta]);
 
     const handlePaste = async () => {
         try {
@@ -415,9 +443,11 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                                     : 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]'
                                 }`} />
                             <h2 className="font-semibold text-sm text-white truncate">
-                                {sessionMeta.engine
-                                    ? sessionMeta.engine.charAt(0).toUpperCase() + sessionMeta.engine.slice(1)
-                                    : sessionId.split('-')[0]}
+                                {sessionMeta.sessionName
+                                    ? sessionMeta.sessionName
+                                    : sessionMeta.engine
+                                        ? sessionMeta.engine.charAt(0).toUpperCase() + sessionMeta.engine.slice(1)
+                                        : sessionId.split('-')[0]}
                                 {sessionMeta.hostname && (
                                     <span className="text-gray-400 font-normal ml-1.5">@ {sessionMeta.hostname}</span>
                                 )}
@@ -456,7 +486,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
             {/* Main chat area */}
             <main className="flex-1 relative w-full min-h-0 bg-gray-950 flex flex-col">
                 {/* 연결 중 오버레이 */}
-                {(isConnecting || isLoadingHistory) && !isDisconnected && (
+                {(isConnecting || isLoadingHistory) && !isDisconnected && messages.length === 0 && (
                     <div className="absolute inset-0 z-10 bg-gray-950/85 flex flex-col items-center justify-center text-gray-300 gap-4 backdrop-blur-sm">
                         <Loader2 className="w-7 h-7 animate-spin text-blue-400" />
                         <div className="text-center">

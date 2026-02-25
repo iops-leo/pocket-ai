@@ -14,6 +14,7 @@ interface Session {
     sessionId: string;
     publicKey: string;
     metadata: {
+        sessionName?: string;
         hostname?: string;
         engine?: string;
         cwd?: string;
@@ -182,7 +183,7 @@ export default function DashboardPage() {
         setIsMobileSidebarOpen(false); // Close mobile sidebar when selecting
     };
 
-    const handleNewSession = async (data: { cwd: string; engine: string }) => {
+    const handleNewSession = async (data: { cwd: string; engine: string; sessionName?: string }) => {
         const token = localStorage.getItem('pocket_ai_token');
         if (!token) {
             router.replace('/login');
@@ -213,6 +214,7 @@ export default function DashboardPage() {
                     cwd: data.cwd,
                     engine: data.engine,
                     hostname: 'pending-from-pwa',
+                    sessionName: data.sessionName,
                 },
                 autoStart: true,
                 launcherSessionId: launcherSession.sessionId,
@@ -246,6 +248,56 @@ export default function DashboardPage() {
             return next.slice(0, 8);
         });
         await fetchSessions(false);
+    };
+
+    const handleRenameSession = async (sessionId: string, sessionName: string) => {
+        const token = localStorage.getItem('pocket_ai_token');
+        if (!token) {
+            router.replace('/login');
+            return;
+        }
+
+        const trimmedName = sessionName.trim();
+        if (!trimmedName) return;
+
+        try {
+            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const res = await fetch(`${serverUrl}/api/sessions/${sessionId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    metadata: {
+                        sessionName: trimmedName,
+                    },
+                }),
+            });
+
+            if (res.status === 401) {
+                localStorage.removeItem('pocket_ai_token');
+                router.replace('/login');
+                return;
+            }
+
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok || !payload.success) return;
+
+            setSessions(prev => prev.map(session => (
+                session.sessionId === sessionId
+                    ? {
+                        ...session,
+                        metadata: {
+                            ...(session.metadata ?? {}),
+                            sessionName: trimmedName,
+                        },
+                    }
+                    : session
+            )));
+        } catch {
+            // rename 실패는 조용히 무시
+        }
     };
 
     const handleDeleteSession = async (sessionId: string) => {
@@ -331,6 +383,7 @@ export default function DashboardPage() {
                     activeSessionId={activeSession}
                     onSelectSession={handleSelectSession}
                     onDeleteSession={handleDeleteSession}
+                    onRenameSession={handleRenameSession}
                     onNewSession={() => setShowNewSessionModal(true)}
                     isCollapsed={isSidebarCollapsed}
                     onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -388,6 +441,14 @@ export default function DashboardPage() {
                     onClose={() => setShowNewSessionModal(false)}
                     onSubmit={handleNewSession}
                     recentPaths={recentPaths}
+                    enabledEngines={Array.from(
+                        new Set(
+                            sessions
+                                .filter(session => session.status === 'online')
+                                .map(session => session.metadata?.engine?.toLowerCase())
+                                .filter((engine): engine is string => Boolean(engine))
+                        )
+                    )}
                 />
             )}
         </div>

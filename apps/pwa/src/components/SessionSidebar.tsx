@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, Plus, ChevronLeft, FolderOpen, Settings, Trash2 } from 'lucide-react';
+import { Search, Plus, ChevronLeft, FolderOpen, Settings, Trash2, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
@@ -9,6 +9,7 @@ interface Session {
     sessionId: string;
     publicKey: string;
     metadata: {
+        sessionName?: string;
         hostname?: string;
         engine?: string;
         cwd?: string;
@@ -22,6 +23,7 @@ interface SessionSidebarProps {
     activeSessionId: string | null;
     onSelectSession: (sessionId: string) => void;
     onDeleteSession: (sessionId: string) => void;
+    onRenameSession: (sessionId: string, sessionName: string) => void;
     onNewSession: () => void;
     isCollapsed?: boolean;
     onToggleCollapse?: () => void;
@@ -56,6 +58,7 @@ export function SessionSidebar({
     activeSessionId,
     onSelectSession,
     onDeleteSession,
+    onRenameSession,
     onNewSession,
     isCollapsed = false,
     onToggleCollapse,
@@ -65,7 +68,8 @@ export function SessionSidebar({
     const [engineFilter, setEngineFilter] = useState<string>('all');
 
     const filteredSessions = sessions.filter(session => {
-        const matchesSearch = session.metadata?.hostname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        const matchesSearch = session.metadata?.sessionName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            session.metadata?.hostname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             session.sessionId.toLowerCase().includes(searchQuery.toLowerCase()) ||
             session.metadata?.cwd?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesEngine = engineFilter === 'all' || session.metadata?.engine?.toLowerCase() === engineFilter.toLowerCase();
@@ -98,10 +102,10 @@ export function SessionSidebar({
                                 ? 'bg-blue-600 text-white'
                                 : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
                             }`}
-                        title={session.metadata?.hostname || session.sessionId.slice(0, 8)}
+                        title={session.metadata?.sessionName || session.metadata?.hostname || session.sessionId.slice(0, 8)}
                     >
                         <span className="text-xs font-mono font-bold">
-                            {(session.metadata?.hostname || session.sessionId).slice(0, 2).toUpperCase()}
+                            {(session.metadata?.sessionName || session.metadata?.hostname || session.sessionId).slice(0, 2).toUpperCase()}
                         </span>
                     </button>
                 ))}
@@ -193,6 +197,7 @@ export function SessionSidebar({
                                 isActive={activeSessionId === session.sessionId}
                                 onClick={() => onSelectSession(session.sessionId)}
                                 onDelete={() => onDeleteSession(session.sessionId)}
+                                onRename={(name) => onRenameSession(session.sessionId, name)}
                             />
                         ))}
                     </div>
@@ -212,6 +217,7 @@ export function SessionSidebar({
                                 isActive={activeSessionId === session.sessionId}
                                 onClick={() => onSelectSession(session.sessionId)}
                                 onDelete={() => onDeleteSession(session.sessionId)}
+                                onRename={(name) => onRenameSession(session.sessionId, name)}
                                 disabled
                             />
                         ))}
@@ -257,18 +263,21 @@ function SessionItem({
     isActive,
     onClick,
     onDelete,
+    onRename,
     disabled = false,
 }: {
     session: Session;
     isActive: boolean;
     onClick: () => void;
     onDelete: () => void;
+    onRename: (name: string) => void;
     disabled?: boolean;
 }) {
     const t = useTranslations('dashboard');
     const [showConfirm, setShowConfirm] = useState(false);
     const isOnline = session.status === 'online';
     const shortPath = getShortPath(session.metadata?.cwd);
+    const displayName = session.metadata?.sessionName || session.metadata?.hostname || 'Unknown Host';
 
     return (
         <div className="relative group">
@@ -291,7 +300,7 @@ function SessionItem({
                 <div className="flex-1 min-w-0 text-left">
                     <div className="flex items-center gap-2">
                         <span className="font-medium text-sm text-white truncate">
-                            {session.metadata?.hostname || 'Unknown Host'}
+                            {displayName}
                         </span>
                         <span
                             className={`px-1.5 py-0.5 text-[10px] rounded-md border font-medium flex-shrink-0 ${getEngineBadgeClass(session.metadata?.engine)}`}
@@ -313,6 +322,23 @@ function SessionItem({
                     </div>
                 </div>
             </button>
+
+            {!showConfirm && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        const nextName = window.prompt(t('renameSessionPrompt'), displayName);
+                        if (nextName === null) return;
+                        const trimmed = nextName.trim();
+                        if (!trimmed || trimmed === displayName) return;
+                        onRename(trimmed);
+                    }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-gray-600 hover:text-blue-300 hover:bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                    title={t('renameSession')}
+                >
+                    <Pencil size={14} />
+                </button>
+            )}
 
             {/* Delete button - appears on hover */}
             {!showConfirm && (
