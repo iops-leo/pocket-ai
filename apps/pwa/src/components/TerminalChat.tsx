@@ -257,6 +257,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     }
 
                     if (msg.t === 'tool-result') {
+                        setIsAiThinking(false);
                         setMessages(prev => prev.map(m =>
                             m.kind === 'tool' && m.id === msg.id
                                 ? { ...m, output: msg.result, status: (msg.error ? 'error' : 'done') as 'error' | 'done', error: msg.error }

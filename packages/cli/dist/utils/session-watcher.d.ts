@@ -61,7 +61,7 @@ export declare class CodexSessionWatcher implements SessionTranscriptWatcher {
  */
 export declare class GeminiSessionWatcher implements SessionTranscriptWatcher {
     private cwd;
-    private chatsDir;
+    private chatsDirs;
     private startTimeMs;
     private onEvent;
     private sessionFile;
@@ -73,6 +73,8 @@ export declare class GeminiSessionWatcher implements SessionTranscriptWatcher {
     start(): void;
     destroy(): void;
     private schedulePoll;
+    private resolveCandidateChatsDirs;
+    private listSessionCandidates;
     private findSessionFile;
     private parseGeminiMessage;
     private readSessionUpdates;

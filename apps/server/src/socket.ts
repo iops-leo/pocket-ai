@@ -74,6 +74,10 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                             socketId: '',
                         };
                         activeSessions.set(sessionId, session);
+                    } else if (!row) {
+                        // DB에도 없으면 삭제된 세션
+                        socket.emit('auth-error', { error: 'Session deleted' });
+                        return;
                     }
                 }
 

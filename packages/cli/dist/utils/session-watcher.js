@@ -497,7 +497,7 @@ export class CodexSessionWatcher {
  */
 export class GeminiSessionWatcher {
     cwd;
-    chatsDir;
+    chatsDirs;
     startTimeMs;
     onEvent;
     sessionFile = null;
@@ -509,8 +509,7 @@ export class GeminiSessionWatcher {
         this.cwd = path.resolve(cwd);
         this.startTimeMs = Date.now();
         this.onEvent = onEvent;
-        const projectHash = hashPath(this.cwd);
-        this.chatsDir = path.join(os.homedir(), '.gemini', 'tmp', projectHash, 'chats');
+        this.chatsDirs = this.resolveCandidateChatsDirs();
     }
     start() {
         this.schedulePoll(1500);
@@ -537,27 +536,89 @@ export class GeminiSessionWatcher {
             this.schedulePoll();
         }, delayMs);
     }
-    findSessionFile() {
-        if (!fs.existsSync(this.chatsDir))
-            return;
-        let names = [];
+    resolveCandidateChatsDirs() {
+        const tmpRoot = path.join(os.homedir(), '.gemini', 'tmp');
+        const dirs = new Set();
+        // Legacy layout: ~/.gemini/tmp/<sha256(cwd)>/chats
+        dirs.add(path.join(tmpRoot, hashPath(this.cwd), 'chats'));
+        // Newer layouts can be mapped via ~/.gemini/projects.json
+        const projectsFile = path.join(os.homedir(), '.gemini', 'projects.json');
         try {
-            names = fs.readdirSync(this.chatsDir);
+            const raw = safeJsonParse(fs.readFileSync(projectsFile, 'utf-8'));
+            const projects = raw && typeof raw.projects === 'object'
+                ? raw.projects
+                : null;
+            if (projects) {
+                const keys = Object.keys(projects).sort((a, b) => b.length - a.length);
+                const matchedProject = keys.find((projectPath) => {
+                    const normalized = path.resolve(projectPath);
+                    return this.cwd === normalized || this.cwd.startsWith(`${normalized}${path.sep}`);
+                });
+                if (matchedProject) {
+                    const alias = projects[matchedProject];
+                    if (typeof alias === 'string' && alias.trim()) {
+                        dirs.add(path.join(tmpRoot, alias.trim(), 'chats'));
+                    }
+                }
+            }
         }
         catch {
-            return;
+            // ignore projects mapping read errors
         }
-        const candidates = [];
-        for (const name of names) {
-            if (!name.startsWith('session-') || !name.endsWith('.json'))
+        // Common default layout: ~/.gemini/tmp/<username>/chats
+        try {
+            dirs.add(path.join(tmpRoot, os.userInfo().username, 'chats'));
+        }
+        catch {
+            // ignore user info errors
+        }
+        // Last resort: scan first-level tmp directories
+        try {
+            if (fs.existsSync(tmpRoot)) {
+                for (const name of fs.readdirSync(tmpRoot)) {
+                    dirs.add(path.join(tmpRoot, name, 'chats'));
+                }
+            }
+        }
+        catch {
+            // ignore
+        }
+        return Array.from(dirs);
+    }
+    listSessionCandidates() {
+        const result = [];
+        for (const chatsDir of this.chatsDirs) {
+            if (!fs.existsSync(chatsDir))
                 continue;
-            const filePath = path.join(this.chatsDir, name);
+            let names = [];
+            try {
+                names = fs.readdirSync(chatsDir);
+            }
+            catch {
+                continue;
+            }
+            for (const name of names) {
+                if (!name.startsWith('session-') || !name.endsWith('.json'))
+                    continue;
+                result.push(path.join(chatsDir, name));
+            }
+        }
+        return result;
+    }
+    findSessionFile() {
+        const fileCandidates = this.listSessionCandidates();
+        if (fileCandidates.length === 0)
+            return;
+        const candidates = [];
+        for (const filePath of fileCandidates) {
             const raw = safeJsonParse(fs.readFileSync(filePath, 'utf-8'));
             if (!raw)
                 continue;
             const startTimeMs = parseIsoMs(raw.startTime);
             const lastUpdatedMs = parseIsoMs(raw.lastUpdated);
             const messages = Array.isArray(raw.messages) ? raw.messages : [];
+            const normalizedMessages = messages
+                .filter((msg) => Boolean(msg && typeof msg === 'object'));
             const messageIds = messages
                 .map((msg) => {
                 if (!msg || typeof msg !== 'object')
@@ -566,7 +627,7 @@ export class GeminiSessionWatcher {
                 return typeof entry.id === 'string' ? entry.id : '';
             })
                 .filter(Boolean);
-            candidates.push({ filePath, startTimeMs, lastUpdatedMs, messageIds });
+            candidates.push({ filePath, startTimeMs, lastUpdatedMs, messages: normalizedMessages, messageIds });
         }
         if (candidates.length === 0)
             return;
@@ -577,11 +638,20 @@ export class GeminiSessionWatcher {
             return;
         this.sessionFile = active.filePath;
         this.seenMessageIds = new Set(active.messageIds);
+        const initialEvents = [];
+        for (let i = 0; i < active.messages.length; i += 1) {
+            const message = active.messages[i];
+            const fallbackId = `gemini-msg-${i}`;
+            initialEvents.push(...this.parseGeminiMessage(message, fallbackId));
+        }
         try {
             this.lastMtimeMs = fs.statSync(active.filePath).mtimeMs;
         }
         catch {
             this.lastMtimeMs = 0;
+        }
+        if (initialEvents.length > 0) {
+            this.onEvent(initialEvents);
         }
     }
     parseGeminiMessage(message, fallbackId) {

@@ -522,7 +522,7 @@ export class CodexSessionWatcher implements SessionTranscriptWatcher {
  */
 export class GeminiSessionWatcher implements SessionTranscriptWatcher {
     private cwd: string;
-    private chatsDir: string;
+    private chatsDirs: string[];
     private startTimeMs: number;
     private onEvent: (events: SessionPayload[]) => void;
     private sessionFile: string | null = null;
@@ -535,9 +535,7 @@ export class GeminiSessionWatcher implements SessionTranscriptWatcher {
         this.cwd = path.resolve(cwd);
         this.startTimeMs = Date.now();
         this.onEvent = onEvent;
-
-        const projectHash = hashPath(this.cwd);
-        this.chatsDir = path.join(os.homedir(), '.gemini', 'tmp', projectHash, 'chats');
+        this.chatsDirs = this.resolveCandidateChatsDirs();
     }
 
     start(): void {
@@ -565,34 +563,102 @@ export class GeminiSessionWatcher implements SessionTranscriptWatcher {
         }, delayMs);
     }
 
-    private findSessionFile(): void {
-        if (!fs.existsSync(this.chatsDir)) return;
+    private resolveCandidateChatsDirs(): string[] {
+        const tmpRoot = path.join(os.homedir(), '.gemini', 'tmp');
+        const dirs = new Set<string>();
 
-        let names: string[] = [];
+        // Legacy layout: ~/.gemini/tmp/<sha256(cwd)>/chats
+        dirs.add(path.join(tmpRoot, hashPath(this.cwd), 'chats'));
+
+        // Newer layouts can be mapped via ~/.gemini/projects.json
+        const projectsFile = path.join(os.homedir(), '.gemini', 'projects.json');
         try {
-            names = fs.readdirSync(this.chatsDir);
+            const raw = safeJsonParse<Record<string, unknown>>(fs.readFileSync(projectsFile, 'utf-8'));
+            const projects = raw && typeof raw.projects === 'object'
+                ? raw.projects as Record<string, unknown>
+                : null;
+
+            if (projects) {
+                const keys = Object.keys(projects).sort((a, b) => b.length - a.length);
+                const matchedProject = keys.find((projectPath) => {
+                    const normalized = path.resolve(projectPath);
+                    return this.cwd === normalized || this.cwd.startsWith(`${normalized}${path.sep}`);
+                });
+
+                if (matchedProject) {
+                    const alias = projects[matchedProject];
+                    if (typeof alias === 'string' && alias.trim()) {
+                        dirs.add(path.join(tmpRoot, alias.trim(), 'chats'));
+                    }
+                }
+            }
         } catch {
-            return;
+            // ignore projects mapping read errors
         }
+
+        // Common default layout: ~/.gemini/tmp/<username>/chats
+        try {
+            dirs.add(path.join(tmpRoot, os.userInfo().username, 'chats'));
+        } catch {
+            // ignore user info errors
+        }
+
+        // Last resort: scan first-level tmp directories
+        try {
+            if (fs.existsSync(tmpRoot)) {
+                for (const name of fs.readdirSync(tmpRoot)) {
+                    dirs.add(path.join(tmpRoot, name, 'chats'));
+                }
+            }
+        } catch {
+            // ignore
+        }
+
+        return Array.from(dirs);
+    }
+
+    private listSessionCandidates(): string[] {
+        const result: string[] = [];
+        for (const chatsDir of this.chatsDirs) {
+            if (!fs.existsSync(chatsDir)) continue;
+            let names: string[] = [];
+            try {
+                names = fs.readdirSync(chatsDir);
+            } catch {
+                continue;
+            }
+
+            for (const name of names) {
+                if (!name.startsWith('session-') || !name.endsWith('.json')) continue;
+                result.push(path.join(chatsDir, name));
+            }
+        }
+        return result;
+    }
+
+    private findSessionFile(): void {
+        const fileCandidates = this.listSessionCandidates();
+        if (fileCandidates.length === 0) return;
 
         type Candidate = {
             filePath: string;
             startTimeMs: number;
             lastUpdatedMs: number;
+            messages: Record<string, unknown>[];
             messageIds: string[];
         };
 
         const candidates: Candidate[] = [];
 
-        for (const name of names) {
-            if (!name.startsWith('session-') || !name.endsWith('.json')) continue;
-            const filePath = path.join(this.chatsDir, name);
+        for (const filePath of fileCandidates) {
             const raw = safeJsonParse<Record<string, unknown>>(fs.readFileSync(filePath, 'utf-8'));
             if (!raw) continue;
 
             const startTimeMs = parseIsoMs(raw.startTime);
             const lastUpdatedMs = parseIsoMs(raw.lastUpdated);
             const messages = Array.isArray(raw.messages) ? raw.messages : [];
+            const normalizedMessages = messages
+                .filter((msg): msg is Record<string, unknown> => Boolean(msg && typeof msg === 'object'));
             const messageIds = messages
                 .map((msg) => {
                     if (!msg || typeof msg !== 'object') return '';
@@ -601,7 +667,7 @@ export class GeminiSessionWatcher implements SessionTranscriptWatcher {
                 })
                 .filter(Boolean);
 
-            candidates.push({ filePath, startTimeMs, lastUpdatedMs, messageIds });
+            candidates.push({ filePath, startTimeMs, lastUpdatedMs, messages: normalizedMessages, messageIds });
         }
 
         if (candidates.length === 0) return;
@@ -615,11 +681,21 @@ export class GeminiSessionWatcher implements SessionTranscriptWatcher {
 
         this.sessionFile = active.filePath;
         this.seenMessageIds = new Set(active.messageIds);
+        const initialEvents: SessionPayload[] = [];
+        for (let i = 0; i < active.messages.length; i += 1) {
+            const message = active.messages[i];
+            const fallbackId = `gemini-msg-${i}`;
+            initialEvents.push(...this.parseGeminiMessage(message, fallbackId));
+        }
 
         try {
             this.lastMtimeMs = fs.statSync(active.filePath).mtimeMs;
         } catch {
             this.lastMtimeMs = 0;
+        }
+
+        if (initialEvents.length > 0) {
+            this.onEvent(initialEvents);
         }
     }
 
