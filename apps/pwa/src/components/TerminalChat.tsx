@@ -43,6 +43,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const historyLoadedRef = useRef(false);
     const loadMessageHistoryRef = useRef<(key: CryptoKey) => Promise<void>>(async () => { });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const initConnectionRef = useRef<(socket: any) => Promise<void>>(async () => { });
 
     // 텍스트에어리어 높이 자동 조절
     const adjustTextareaHeight = useCallback(() => {
@@ -110,7 +112,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         }
     }, [sessionId]);
 
-    // ref 동기화: initConnection에서 항상 최신 함수 사용
+    // ref 동기화: connect 이벤트에서 항상 최신 함수 사용
     loadMessageHistoryRef.current = loadMessageHistory;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -191,6 +193,9 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         }
     }, [sessionId]);
 
+    // ref 동기화: connect 이벤트에서 항상 최신 initConnection 사용
+    initConnectionRef.current = initConnection;
+
     useEffect(() => {
         const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
         const socket = io(SERVER_URL, {
@@ -207,7 +212,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
             }
             setIsDisconnected(false);
             setIsConnecting(true);
-            initConnection(socket);
+            initConnectionRef.current(socket);
         });
 
         socket.on('disconnect', (reason) => {
@@ -281,7 +286,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                 clearTimeout(disconnectTimerRef.current);
             }
         };
-    }, [sessionId, initConnection]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessionId]);
 
     // 세션 변경 시 상태 초기화
     useEffect(() => {
