@@ -189,6 +189,14 @@ export default function DashboardPage() {
             throw new Error(t('createFailed'));
         }
 
+        const launcherSession = (activeSession
+            ? sessions.find(session => session.sessionId === activeSession && session.status === 'online')
+            : null) ?? sessions.find(session => session.status === 'online');
+
+        if (!launcherSession) {
+            throw new Error(t('noOnlineLauncher'));
+        }
+
         const keyPair = await generateECDHKeyPair();
         const publicKey = await exportPublicKey(keyPair.publicKey);
         const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -206,6 +214,8 @@ export default function DashboardPage() {
                     engine: data.engine,
                     hostname: 'pending-from-pwa',
                 },
+                autoStart: true,
+                launcherSessionId: launcherSession.sessionId,
             }),
         });
 
@@ -218,6 +228,9 @@ export default function DashboardPage() {
         const payload = await res.json().catch(() => ({}));
         if (!res.ok || !payload.success) {
             throw new Error(payload.error || t('createFailed'));
+        }
+        if (!payload?.data?.launchRequested) {
+            throw new Error(t('createLaunchPending'));
         }
 
         setRecentPaths(prev => {

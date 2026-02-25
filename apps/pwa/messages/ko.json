@@ -47,6 +47,8 @@
     "engine": "AI 엔진",
     "pathRequired": "작업 디렉토리를 입력하세요",
     "createFailed": "세션 생성에 실패했습니다",
+    "noOnlineLauncher": "먼저 PC에서 실행 중인 세션(online)이 필요합니다.",
+    "createLaunchPending": "세션은 생성됐지만 PC 시작 요청이 전달되지 않았습니다.",
     "creating": "생성 중...",
     "createSession": "세션 생성",
     "recentPaths": "최근 사용 경로",

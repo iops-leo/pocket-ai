@@ -29,23 +29,43 @@ export function setServerUrl(url) {
 export function saveSessionKeys(cwd, keys, engine = 'claude') {
     const cwdHash = hashSessionScope(cwd, engine);
     const sessionKeys = config.get('sessionKeys') || {};
-    sessionKeys[cwdHash] = keys;
+    sessionKeys[cwdHash] = {
+        ...keys,
+        engine,
+    };
     config.set('sessionKeys', sessionKeys);
 }
 // 세션 키 로드
 export function loadSessionKeys(cwd, engine = 'claude') {
     const cwdHash = hashSessionScope(cwd, engine);
     const sessionKeys = config.get('sessionKeys') || {};
-    // Backward compatibility: old versions keyed by cwd only.
+    const scoped = sessionKeys[cwdHash] || null;
+    if (scoped)
+        return scoped;
+    // Backward compatibility: old versions keyed by cwd only (claude only).
+    if (engine !== 'claude') {
+        return null;
+    }
     const legacyCwdHash = crypto.createHash('sha256').update(cwd).digest('hex').slice(0, 16);
-    return sessionKeys[cwdHash] || sessionKeys[legacyCwdHash] || null;
+    const legacy = sessionKeys[legacyCwdHash] || null;
+    if (!legacy)
+        return null;
+    // One-time migration from legacy key to claude-scoped key
+    sessionKeys[cwdHash] = {
+        ...legacy,
+        engine: 'claude',
+    };
+    config.set('sessionKeys', sessionKeys);
+    return sessionKeys[cwdHash];
 }
 // 세션 키 삭제
 export function clearSessionKeys(cwd, engine = 'claude') {
     const cwdHash = hashSessionScope(cwd, engine);
     const sessionKeys = config.get('sessionKeys') || {};
     delete sessionKeys[cwdHash];
-    const legacyCwdHash = crypto.createHash('sha256').update(cwd).digest('hex').slice(0, 16);
-    delete sessionKeys[legacyCwdHash];
+    if (engine === 'claude') {
+        const legacyCwdHash = crypto.createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+        delete sessionKeys[legacyCwdHash];
+    }
     config.set('sessionKeys', sessionKeys);
 }

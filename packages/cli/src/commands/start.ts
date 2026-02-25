@@ -1,11 +1,69 @@
 import { Command } from 'commander';
 import os from 'os';
+import path from 'path';
+import fs from 'fs';
+import { spawn } from 'child_process';
 import { generateECDHKeyPair, exportPublicKey, exportPrivateKey, importPublicKey, importPrivateKey, deriveSharedSecret, encrypt, decrypt, generateSessionKey, exportSessionKey, importSessionKey, wrapSessionKey } from '@pocket-ai/wire';
 import { getToken, saveSessionKeys, loadSessionKeys } from '../config.js';
 import { connectToServer, registerSession } from '../server/connection.js';
 import type { Socket } from 'socket.io-client';
-import { SessionWatcher, getSessionKey, getSessionDisplayName, isValidEngine } from '../session-manager.js';
+import { SessionWatcher, getSessionDisplayName, isValidEngine } from '../session-manager.js';
 import { createSessionTranscriptWatcher } from '../utils/session-watcher.js';
+
+interface StartOptions {
+  remote?: boolean;
+  cwd?: string;
+  attachSession?: string;
+  headless?: boolean;
+}
+
+function resolveWorkingDirectory(input?: string): string {
+  const raw = (input && input.trim()) ? input.trim() : process.cwd();
+
+  const expanded = raw === '~'
+    ? os.homedir()
+    : raw.startsWith('~/')
+      ? path.join(os.homedir(), raw.slice(2))
+      : raw;
+
+  const resolved = path.isAbsolute(expanded)
+    ? path.resolve(expanded)
+    : path.resolve(process.cwd(), expanded);
+
+  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+    throw new Error(`존재하지 않는 경로입니다: ${resolved}`);
+  }
+
+  return resolved;
+}
+
+function spawnSessionFromRequest(payload: { sessionId: string; engine: string; cwd: string }): void {
+  const entryScript = process.argv[1];
+  if (!entryScript) {
+    console.error('[Pocket AI] spawn 실패: CLI entry를 찾을 수 없습니다.');
+    return;
+  }
+
+  const child = spawn(
+    process.execPath,
+    [
+      entryScript,
+      'start',
+      payload.engine,
+      '--cwd',
+      payload.cwd,
+      '--attach-session',
+      payload.sessionId,
+      '--headless',
+    ],
+    {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env },
+    }
+  );
+  child.unref();
+}
 
 function stripAnsi(input: string): string {
   return input.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
@@ -14,14 +72,26 @@ function stripAnsi(input: string): string {
 /**
  * AI CLI 세션 시작 (Happy 스타일 심플 래퍼)
  */
-export async function startSession(command: string = 'claude', options: { remote?: boolean } = {}) {
+export async function startSession(command: string = 'claude', options: StartOptions = {}) {
   const token = getToken();
   if (!token) {
     console.error('로그인이 필요합니다. pocket-ai login을 먼저 실행하세요.');
     process.exit(1);
   }
 
-  console.log(`Pocket AI - ${command} 세션을 시작합니다...`);
+  let resolvedCwd: string;
+  try {
+    resolvedCwd = resolveWorkingDirectory(options.cwd);
+  } catch (err: any) {
+    console.error(`[Pocket AI] ${err.message}`);
+    process.exit(1);
+  }
+
+  process.chdir(resolvedCwd);
+  const attachSessionId = options.attachSession?.trim() || '';
+  const headless = Boolean(options.headless);
+
+  console.log(`Pocket AI - ${command} 세션을 시작합니다... (${resolvedCwd})`);
 
   const cwd = process.cwd();
   const engine = command.trim().toLowerCase();
@@ -49,6 +119,7 @@ export async function startSession(command: string = 'claude', options: { remote
   let keyPair: CryptoKeyPair;
   let publicKeyBase64: string;
   let sessionId: string;
+  let shouldPersistKeys = false;
 
   if (existingKeys) {
     // 기존 키쌍 복원
@@ -57,20 +128,31 @@ export async function startSession(command: string = 'claude', options: { remote
       const publicKey = await importPublicKey(existingKeys.publicKey);
       keyPair = { privateKey, publicKey };
       publicKeyBase64 = existingKeys.publicKey;
-      sessionId = existingKeys.sessionId;
+      sessionId = attachSessionId || existingKeys.sessionId;
+      shouldPersistKeys = Boolean(attachSessionId && attachSessionId !== existingKeys.sessionId);
       console.log(`기존 세션 복원: ${sessionId.slice(0, 8)}... (이력 복원 가능)`);
     } catch (err) {
       // 키 복원 실패 시 새로 생성
       console.log('기존 키 복원 실패, 새 세션을 생성합니다...');
       keyPair = await generateECDHKeyPair();
       publicKeyBase64 = await exportPublicKey(keyPair.publicKey);
-      sessionId = await registerNewSession(publicKeyBase64, engine, cwd, keyPair);
+      if (attachSessionId) {
+        sessionId = attachSessionId;
+        shouldPersistKeys = true;
+      } else {
+        sessionId = await registerNewSession(publicKeyBase64, engine, cwd, keyPair);
+      }
     }
   } else {
     // 새 키쌍 생성
     keyPair = await generateECDHKeyPair();
     publicKeyBase64 = await exportPublicKey(keyPair.publicKey);
-    sessionId = await registerNewSession(publicKeyBase64, engine, cwd, keyPair);
+    if (attachSessionId) {
+      sessionId = attachSessionId;
+      shouldPersistKeys = true;
+    } else {
+      sessionId = await registerNewSession(publicKeyBase64, engine, cwd, keyPair);
+    }
   }
 
   // 세션이 서버에 존재하는지 확인하고, 없으면 재등록
@@ -103,6 +185,24 @@ export async function startSession(command: string = 'claude', options: { remote
     return newSessionId;
   }
 
+  async function persistSessionKeys(targetSessionId: string) {
+    const privateKeyBase64 = await exportPrivateKey(keyPair.privateKey);
+    saveSessionKeys(cwd, {
+      publicKey: publicKeyBase64,
+      privateKey: privateKeyBase64,
+      sessionId: targetSessionId,
+      sessionKey: sessionKeyBase64,
+    }, engine);
+  }
+
+  if (shouldPersistKeys) {
+    await persistSessionKeys(sessionId);
+    console.log(`[Pocket AI] 세션 연결 정보 저장: ${sessionId.slice(0, 8)}...`);
+  }
+  if (attachSessionId) {
+    console.log(`[Pocket AI] 지정된 세션에 연결합니다: ${sessionId.slice(0, 8)}...`);
+  }
+
   // 3. Dynamically import node-pty (native module)
   let pty: any;
   try {
@@ -117,7 +217,7 @@ export async function startSession(command: string = 'claude', options: { remote
     name: 'xterm-256color',
     cols: process.stdout.columns || 80,
     rows: process.stdout.rows || 24,
-    cwd: process.cwd(),
+    cwd,
     env: { ...process.env },
   });
 
@@ -127,7 +227,7 @@ export async function startSession(command: string = 'claude', options: { remote
 
   // JSONL session watcher — reads Claude Code's native transcript file
   // instead of parsing fragile PTY/ANSI output
-  const sessionWatcher = createSessionTranscriptWatcher(engine, process.cwd(), (events) => {
+  const sessionWatcher = createSessionTranscriptWatcher(engine, cwd, (events) => {
     if (sessionKey && socket) {
       for (const event of events) {
         encrypt(JSON.stringify(event), sessionKey)
@@ -146,7 +246,9 @@ export async function startSession(command: string = 'claude', options: { remote
   const shouldRelayPtyText = !sessionWatcher;
 
   shell.onData((data: string) => {
-    process.stdout.write(data); // 로컬 터미널은 raw ANSI 그대로 (변경 없음)
+    if (!headless) {
+      process.stdout.write(data); // 로컬 터미널은 raw ANSI 그대로 (변경 없음)
+    }
 
     // Claude 외 엔진(codex/gemini)은 PTY 출력을 그대로 원격으로 중계
     if (shouldRelayPtyText && socket && sessionKey) {
@@ -165,19 +267,21 @@ export async function startSession(command: string = 'claude', options: { remote
     }
   });
 
-  // Handle local keyboard input
-  if (process.stdin.isTTY) {
-    process.stdin.setRawMode(true);
-  }
-  process.stdin.resume();
-  process.stdin.on('data', (data: Buffer) => {
-    shell.write(data.toString());
-  });
+  if (!headless) {
+    // Handle local keyboard input
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+    process.stdin.resume();
+    process.stdin.on('data', (data: Buffer) => {
+      shell.write(data.toString());
+    });
 
-  // Handle terminal resize
-  process.stdout.on('resize', () => {
-    shell.resize(process.stdout.columns || 80, process.stdout.rows || 24);
-  });
+    // Handle terminal resize
+    process.stdout.on('resize', () => {
+      shell.resize(process.stdout.columns || 80, process.stdout.rows || 24);
+    });
+  }
 
   // Handle CLI process exit
   shell.onExit(({ exitCode }: { exitCode: number }) => {
@@ -189,7 +293,7 @@ export async function startSession(command: string = 'claude', options: { remote
 
   // 6. Connect to relay server
   if (options.remote !== false) {
-    const sessionMetadata = { hostname: os.hostname(), engine, cwd: process.cwd() };
+    const sessionMetadata = { hostname: os.hostname(), engine, cwd };
     socket = connectToServer({
       sessionId,
       publicKey: publicKeyBase64,
@@ -197,13 +301,7 @@ export async function startSession(command: string = 'claude', options: { remote
       onSessionIdUpdate: async (newSessionId) => {
         sessionId = newSessionId;
         // 새 세션 ID로 키 저장 갱신
-        const privateKeyBase64 = await exportPrivateKey(keyPair.privateKey);
-        saveSessionKeys(cwd, {
-          publicKey: publicKeyBase64,
-          privateKey: privateKeyBase64,
-          sessionId: newSessionId,
-          sessionKey: sessionKeyBase64,
-        }, engine);
+        await persistSessionKeys(newSessionId);
         console.log(`[Pocket AI] 세션 재등록 완료: ${newSessionId.slice(0, 8)}...`);
       },
       onAuthSuccess: (data) => {
@@ -257,46 +355,72 @@ export async function startSession(command: string = 'claude', options: { remote
         console.log('[Pocket AI] 서버 연결이 끊어졌습니다. 재연결 중...');
       },
     });
+
+    socket.on('session-spawn-request', (payload: any) => {
+      if (!payload || typeof payload.sessionId !== 'string') return;
+
+      const requestedEngine = typeof payload?.metadata?.engine === 'string'
+        ? payload.metadata.engine.trim().toLowerCase()
+        : '';
+      const requestedCwd = typeof payload?.metadata?.cwd === 'string'
+        ? payload.metadata.cwd.trim()
+        : '';
+
+      if (!requestedEngine || !isValidEngine(requestedEngine) || !requestedCwd) {
+        console.error('[Pocket AI] 세션 시작 요청 무시: engine/cwd 정보가 유효하지 않습니다.');
+        return;
+      }
+
+      console.log(
+        `[Pocket AI] 원격 세션 생성 요청 수신: ${payload.sessionId.slice(0, 8)}... (${requestedEngine}, ${requestedCwd})`
+      );
+      spawnSessionFromRequest({
+        sessionId: payload.sessionId,
+        engine: requestedEngine,
+        cwd: requestedCwd,
+      });
+    });
   }
 
-  // 7. Happy 스타일 폴더 변경 감지 (선택적 기능)
-  const watcher = new SessionWatcher(engine);
-  watcher.onCwdChange((oldKey, newKey) => {
-    console.log(`\n[Pocket AI] 폴더 변경 감지: ${getSessionDisplayName(oldKey)} → ${getSessionDisplayName(newKey)}`);
-    console.log('현재 세션을 계속 사용합니다. 새 세션을 시작하려면 Ctrl+C 후 pocket-ai를 다시 실행하세요.\n');
-    // TODO: 데몬 모드에서는 자동으로 새 세션 시작
-  });
-  watcher.start();
+  let watcher: SessionWatcher | null = null;
+  if (!headless) {
+    // 7. Happy 스타일 폴더 변경 감지 (선택적 기능)
+    watcher = new SessionWatcher(engine);
+    watcher.onCwdChange((oldKey, newKey) => {
+      console.log(`\n[Pocket AI] 폴더 변경 감지: ${getSessionDisplayName(oldKey)} → ${getSessionDisplayName(newKey)}`);
+      console.log('현재 세션을 계속 사용합니다. 새 세션을 시작하려면 Ctrl+C 후 pocket-ai를 다시 실행하세요.\n');
+      // TODO: 데몬 모드에서는 자동으로 새 세션 시작
+    });
+    watcher.start();
 
-  // 8. CLI 내부 명령어 처리 (Happy 스타일 /switch)
-  let commandBuffer = '';
-  const originalStdinListener = process.stdin.listeners('data')[0];
-  process.stdin.removeAllListeners('data');
+    // 8. CLI 내부 명령어 처리 (Happy 스타일 /switch)
+    process.stdin.removeAllListeners('data');
 
-  process.stdin.on('data', (data: Buffer) => {
-    const input = data.toString();
+    process.stdin.on('data', (data: Buffer) => {
+      const input = data.toString();
 
-    // /switch 명령어 감지
-    if (input.startsWith('/switch ')) {
-      const newEngine = input.slice(8).trim();
-      if (isValidEngine(newEngine)) {
-        console.log(`\n[Pocket AI] AI 엔진을 ${newEngine}으로 전환합니다...`);
-        // TODO: 현재 세션 종료 후 새 엔진으로 재시작
-        console.log('(구현 예정: 현재는 수동으로 Ctrl+C 후 pocket-ai start ' + newEngine + ' 실행)\n');
-      } else {
-        console.log(`\n[Pocket AI] 지원하지 않는 엔진입니다: ${newEngine}`);
-        console.log('지원 엔진: claude, codex, gemini\n');
+      // /switch 명령어 감지
+      if (input.startsWith('/switch ')) {
+        const newEngine = input.slice(8).trim();
+        if (isValidEngine(newEngine)) {
+          console.log(`\n[Pocket AI] AI 엔진을 ${newEngine}으로 전환합니다...`);
+          // TODO: 현재 세션 종료 후 새 엔진으로 재시작
+          console.log('(구현 예정: 현재는 수동으로 Ctrl+C 후 pocket-ai start ' + newEngine + ' 실행)\n');
+        } else {
+          console.log(`\n[Pocket AI] 지원하지 않는 엔진입니다: ${newEngine}`);
+          console.log('지원 엔진: claude, codex, gemini\n');
+        }
+        return;
       }
-      return;
-    }
 
-    // 일반 입력은 AI CLI로 전달
-    shell.write(input);
-  });
+      // 일반 입력은 AI CLI로 전달
+      shell.write(input);
+    });
+  }
 
   // Graceful shutdown
   const cleanup = () => {
-    watcher.stop();
+    watcher?.stop();
     sessionWatcher?.destroy();
     shell.kill();
     if (socket) socket.disconnect();
@@ -310,5 +434,8 @@ export async function startSession(command: string = 'claude', options: { remote
 export const startCommand = new Command('start')
   .description('AI CLI 세션 시작 (고급: 특정 AI 엔진 지정)')
   .argument('[command]', 'AI CLI 명령어', 'claude')
+  .option('--cwd <path>', '작업 디렉토리 지정')
+  .option('--attach-session <id>', '기존 sessionId에 attach (내부용)')
+  .option('--headless', '백그라운드(원격 전용) 모드')
   .option('--no-remote', '원격 접속 비활성화 (로컬 전용)')
   .action(startSession);

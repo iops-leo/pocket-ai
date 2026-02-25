@@ -61,6 +61,7 @@ const io = new Server(fastify.server, {
     pingInterval: 30000,    // 30초 (기본 25초)
 });
 setupSocketIO(io, fastify);
+(fastify as any).io = io;
 
 // Setup Routes
 fastify.register(authRoutes, { prefix: '/auth' });

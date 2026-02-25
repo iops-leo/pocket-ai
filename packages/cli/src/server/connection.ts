@@ -32,8 +32,17 @@ export function connectToServer(options: ConnectOptions): Socket {
     reconnectionDelayMax: 10000,
   });
 
+  const emitClientAuth = () => {
+    socket.emit('client-auth', {
+      sessionId: currentSessionId,
+      token,
+      publicKey: options.publicKey,
+      metadata: options.metadata,
+    });
+  };
+
   socket.on('connect', () => {
-    socket.emit('client-auth', { sessionId: currentSessionId, token });
+    emitClientAuth();
   });
 
   socket.on('auth-success', options.onAuthSuccess);
@@ -45,7 +54,7 @@ export function connectToServer(options: ConnectOptions): Socket {
         const newSessionId = await registerSession(options.publicKey, options.metadata);
         currentSessionId = newSessionId;
         options.onSessionIdUpdate(newSessionId);
-        socket.emit('client-auth', { sessionId: currentSessionId, token });
+        emitClientAuth();
       } catch (err: any) {
         console.error('[Pocket AI] 세션 재등록 실패:', err.message);
         options.onAuthError(data);

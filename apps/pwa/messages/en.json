@@ -47,6 +47,8 @@
     "engine": "AI Engine",
     "pathRequired": "Please enter a working directory",
     "createFailed": "Failed to create session",
+    "noOnlineLauncher": "An online PC session is required first.",
+    "createLaunchPending": "Session created, but launch request was not delivered to your PC.",
     "creating": "Creating...",
     "createSession": "Create Session",
     "recentPaths": "Recent paths",

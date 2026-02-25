@@ -2,6 +2,7 @@ interface SessionKeys {
     publicKey: string;
     privateKey: string;
     sessionId: string;
+    engine?: string;
     sessionKey?: string;
 }
 export declare function getToken(): string | undefined;

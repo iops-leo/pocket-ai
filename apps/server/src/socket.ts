@@ -50,7 +50,7 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
 
         // 1. `client-auth`: CLI 인증 및 세션 활성화
         socket.on('client-auth', async (payload: any) => {
-            const { sessionId, token } = payload;
+            const { sessionId, token, publicKey, metadata } = payload;
 
             try {
                 const decoded: any = fastify.jwt.verify(token);
@@ -78,6 +78,15 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                 }
 
                 if (session && session.userId === decoded.sub) {
+                    if (typeof publicKey === 'string' && publicKey.trim()) {
+                        session.publicKey = publicKey;
+                    }
+                    if (metadata && typeof metadata === 'object') {
+                        session.metadata = {
+                            ...(session.metadata ?? {}),
+                            ...metadata,
+                        };
+                    }
                     session.status = 'online';
                     session.socketId = socket.id;
                     socket.join(`session_${sessionId}`);
@@ -85,9 +94,19 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                     fastify.log.info(`Session ${sessionId} online via ${socket.id}`);
 
                     // DB 상태 업데이트
+                    const updatePayload: Record<string, any> = {
+                        status: 'online',
+                        updated_at: new Date(),
+                    };
+                    if (typeof publicKey === 'string' && publicKey.trim()) {
+                        updatePayload.public_key = publicKey;
+                    }
+                    if (metadata && typeof metadata === 'object') {
+                        updatePayload.metadata = JSON.stringify(session.metadata ?? {});
+                    }
                     await db
                         .updateTable('sessions')
-                        .set({ status: 'online', updated_at: new Date() })
+                        .set(updatePayload)
                         .where('id', '=', sessionId)
                         .execute();
 

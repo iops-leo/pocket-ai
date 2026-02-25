@@ -75,8 +75,22 @@ export async function sessionRoutes(fastify: FastifyInstance) {
             return reply.code(401).send({ error: 'Invalid token' });
         }
 
-        const { publicKey, metadata } = request.body as any;
+        const { publicKey, metadata, launcherSessionId, autoStart } = request.body as any;
         if (!publicKey) return reply.code(400).send({ error: 'Missing publicKey' });
+
+        if (autoStart) {
+            if (!launcherSessionId || typeof launcherSessionId !== 'string') {
+                return reply.code(400).send({ error: 'Missing launcherSessionId' });
+            }
+            const launcherSession = activeSessions.get(launcherSessionId);
+            if (
+                !launcherSession ||
+                launcherSession.userId !== decoded.sub ||
+                launcherSession.status !== 'online'
+            ) {
+                return reply.code(409).send({ error: 'Launcher session is offline' });
+            }
+        }
 
         const sessionId = crypto.randomUUID();
         const metadataStr = JSON.stringify(metadata ?? {});
@@ -103,7 +117,21 @@ export async function sessionRoutes(fastify: FastifyInstance) {
             socketId: '',
         });
 
-        return { success: true, data: { sessionId } };
+        if (autoStart && launcherSessionId) {
+            const io = (fastify as any).io;
+            io?.to(`session_${launcherSessionId}`).emit('session-spawn-request', {
+                sessionId,
+                metadata: metadata ?? {},
+            });
+        }
+
+        return {
+            success: true,
+            data: {
+                sessionId,
+                launchRequested: Boolean(autoStart && launcherSessionId),
+            },
+        };
     });
 
     // GET /api/sessions: PWA/CLI가 사용자 세션 목록 조회 (online/offline 모두)
