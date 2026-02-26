@@ -71,6 +71,7 @@
     "deleteSessionConfirm": "Delete this session? Chat history will also be removed.",
     "deleteSessionSuccess": "Session deleted",
     "deleteSessionFailed": "Failed to delete session",
+    "renameSessionFailed": "Failed to rename session",
     "cancel": "Cancel"
   },
   "settings": {
@@ -90,6 +91,11 @@
     "english": "English"
   },
   "chat": {
+    "slashCommandsTitle": "Slash Commands",
+    "slashCommandsHint": "↑↓ Navigate · Tab/Enter Select · Esc Close",
+    "sessionReady": "Session Connected",
+    "sessionReadyHint1": "Send a message to the AI.",
+    "sessionReadyHint2": "Responses will appear in real time.",
     "connecting": "Connecting",
     "connected": "Secure Connection",
     "disconnected": "Disconnected",

@@ -46,8 +46,14 @@ export default function DashboardPage() {
     // New session modal
     const [showNewSessionModal, setShowNewSessionModal] = useState(false);
 
+    const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
     const socketRef = useRef<Socket | null>(null);
     const hasAutoOpenedMobileSidebar = useRef(false);
+
+    const showToast = useCallback((message: string, type: 'error' | 'success' = 'error') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000);
+    }, []);
 
     const fetchSessions = useCallback(async (showLoader = true) => {
         const token = localStorage.getItem('pocket_ai_token');
@@ -296,7 +302,7 @@ export default function DashboardPage() {
                     : session
             )));
         } catch {
-            // rename 실패는 조용히 무시
+            showToast(t('renameSessionFailed'));
         }
     };
 
@@ -331,7 +337,7 @@ export default function DashboardPage() {
                 }
             }
         } catch {
-            // 삭제 실패는 조용히 처리
+            showToast(t('deleteSessionFailed'));
         }
     };
 
@@ -440,6 +446,15 @@ export default function DashboardPage() {
                     </div>
                 )}
             </div>
+
+            {/* Toast 알림 */}
+            {toast && (
+                <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-sm font-medium shadow-xl transition-all ${
+                    toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'
+                }`}>
+                    {toast.message}
+                </div>
+            )}
 
             {/* New Session Modal */}
             {showNewSessionModal && (

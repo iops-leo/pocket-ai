@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Search, Plus, ChevronLeft, FolderOpen, Settings, Trash2, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -275,9 +275,16 @@ function SessionItem({
 }) {
     const t = useTranslations('dashboard');
     const [showConfirm, setShowConfirm] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValue, setEditValue] = useState('');
+    const editInputRef = useRef<HTMLInputElement>(null);
     const isOnline = session.status === 'online';
     const shortPath = getShortPath(session.metadata?.cwd);
     const displayName = session.metadata?.sessionName || session.metadata?.hostname || 'Unknown Host';
+
+    useEffect(() => {
+        if (isEditing) editInputRef.current?.focus();
+    }, [isEditing]);
 
     return (
         <div className="relative group">
@@ -299,9 +306,31 @@ function SessionItem({
                 {/* Content */}
                 <div className="flex-1 min-w-0 text-left">
                     <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm text-white truncate">
-                            {displayName}
-                        </span>
+                        {isEditing ? (
+                            <input
+                                ref={editInputRef}
+                                type="text"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const trimmed = editValue.trim();
+                                        if (trimmed && trimmed !== displayName) onRename(trimmed);
+                                        setIsEditing(false);
+                                    } else if (e.key === 'Escape') {
+                                        setIsEditing(false);
+                                    }
+                                }}
+                                onBlur={() => setIsEditing(false)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="bg-gray-800 text-white text-sm font-medium rounded px-1.5 py-0.5 w-full border border-blue-500/50 focus:outline-none"
+                            />
+                        ) : (
+                            <span className="font-medium text-sm text-white truncate">
+                                {displayName}
+                            </span>
+                        )}
                         <span
                             className={`px-1.5 py-0.5 text-[10px] rounded-md border font-medium flex-shrink-0 ${getEngineBadgeClass(session.metadata?.engine)}`}
                             title={`Engine: ${getEngineLabel(session.metadata?.engine)}`}
@@ -327,11 +356,8 @@ function SessionItem({
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        const nextName = window.prompt(t('renameSessionPrompt'), displayName);
-                        if (nextName === null) return;
-                        const trimmed = nextName.trim();
-                        if (!trimmed || trimmed === displayName) return;
-                        onRename(trimmed);
+                        setEditValue(displayName);
+                        setIsEditing(true);
                     }}
                     className="absolute right-8 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-gray-600 hover:text-blue-300 hover:bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-all"
                     title={t('renameSession')}

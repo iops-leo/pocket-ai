@@ -71,6 +71,7 @@
     "deleteSessionConfirm": "이 세션을 삭제하시겠습니까? 대화 이력도 함께 삭제됩니다.",
     "deleteSessionSuccess": "세션이 삭제되었습니다",
     "deleteSessionFailed": "세션 삭제에 실패했습니다",
+    "renameSessionFailed": "세션 이름 변경에 실패했습니다",
     "cancel": "취소"
   },
   "settings": {
@@ -90,6 +91,11 @@
     "english": "English"
   },
   "chat": {
+    "slashCommandsTitle": "슬래시 명령어",
+    "slashCommandsHint": "↑↓ 이동 · Tab/Enter 선택 · Esc 닫기",
+    "sessionReady": "세션 연결됨",
+    "sessionReadyHint1": "AI에게 메시지를 보내세요.",
+    "sessionReadyHint2": "응답은 실시간으로 표시됩니다.",
     "connecting": "연결 중",
     "connected": "보안 연결됨",
     "disconnected": "연결 끊김",

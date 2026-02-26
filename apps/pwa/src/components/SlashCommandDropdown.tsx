@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Command, Plug, FolderOpen } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 export interface SlashCommand {
     name: string;
@@ -103,6 +104,8 @@ export function SlashCommandDropdown({
         }
     }, [visible, handleKeyDown]);
 
+    const t = useTranslations('chat');
+
     if (!visible || filtered.length === 0) return null;
 
     return (
@@ -112,10 +115,10 @@ export function SlashCommandDropdown({
                 <div className="px-3 py-2 border-b border-gray-800 flex items-center gap-2">
                     <Command size={14} className="text-gray-500" />
                     <span className="text-xs text-gray-400 font-medium">
-                        슬래시 명령어
+                        {t('slashCommandsTitle')}
                     </span>
                     <span className="text-xs text-gray-600 ml-auto">
-                        ↑↓ 이동 · Tab/Enter 선택 · Esc 닫기
+                        {t('slashCommandsHint')}
                     </span>
                 </div>
 

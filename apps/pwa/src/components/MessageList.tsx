@@ -55,15 +55,16 @@ function ThinkingIndicator() {
 }
 
 function EmptyState() {
+    const t = useTranslations('chat');
     return (
         <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-3 px-6">
             <div className="w-14 h-14 rounded-full bg-gray-800/50 flex items-center justify-center border border-gray-700/30 shadow-inner">
                 <Zap size={22} className="text-blue-500/60" />
             </div>
-            <p className="text-sm font-medium text-gray-400">세션 연결됨</p>
+            <p className="text-sm font-medium text-gray-400">{t('sessionReady')}</p>
             <p className="text-xs text-center text-gray-600 leading-relaxed">
-                AI에게 메시지를 보내세요.<br />
-                응답은 실시간으로 표시됩니다.
+                {t('sessionReadyHint1')}<br />
+                {t('sessionReadyHint2')}
             </p>
         </div>
     );
