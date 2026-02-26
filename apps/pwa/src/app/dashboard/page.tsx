@@ -153,6 +153,8 @@ export default function DashboardPage() {
 
         socket.on('connect', () => {
             console.log('Real-time updates connected');
+            // 사용자 룸 가입 → session-online/offline 실시간 수신
+            socket.emit('pwa-dashboard-auth', { token });
         });
 
         socket.on('session-offline', ({ sessionId }: { sessionId: string }) => {

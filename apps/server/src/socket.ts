@@ -153,6 +153,23 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
             }
         });
 
+        // 1.5. `pwa-dashboard-auth`: PWA 대시보드가 실시간 업데이트 수신을 위해 사용자 룸 가입
+        socket.on('pwa-dashboard-auth', async (payload: any) => {
+            const { token } = payload ?? {};
+            try {
+                const decoded: any = fastify.jwt.verify(token);
+                if (typeof decoded?.sub !== 'string' || !decoded.sub) {
+                    socket.emit('dashboard-auth-error', { error: 'Invalid token' });
+                    return;
+                }
+                socket.join(`user_${decoded.sub}`);
+                socket.emit('dashboard-auth-success');
+                fastify.log.info(`Dashboard socket ${socket.id} joined user_${decoded.sub}`);
+            } catch {
+                socket.emit('dashboard-auth-error', { error: 'Invalid token' });
+            }
+        });
+
         // 2. `session-join`: PWA가 세션 참여
         socket.on('session-join', async (payload: any) => {
             const { sessionId, token } = payload;
