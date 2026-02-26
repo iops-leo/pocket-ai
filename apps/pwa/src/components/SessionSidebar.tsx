@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Search, Plus, ChevronLeft, FolderOpen, Settings, Trash2, Pencil } from 'lucide-react';
+import { Search, Plus, ChevronLeft, FolderOpen, Settings, Trash2, Pencil, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
@@ -25,6 +25,7 @@ interface SessionSidebarProps {
     onDeleteSession: (sessionId: string) => void;
     onRenameSession: (sessionId: string, sessionName: string) => void;
     onNewSession: () => void;
+    onRefresh?: () => void;
     isCollapsed?: boolean;
     onToggleCollapse?: () => void;
 }
@@ -60,12 +61,24 @@ export function SessionSidebar({
     onDeleteSession,
     onRenameSession,
     onNewSession,
+    onRefresh,
     isCollapsed = false,
     onToggleCollapse,
 }: SessionSidebarProps) {
     const t = useTranslations('dashboard');
     const [searchQuery, setSearchQuery] = useState('');
     const [engineFilter, setEngineFilter] = useState<string>('all');
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    const handleRefresh = async () => {
+        if (!onRefresh || isRefreshing) return;
+        setIsRefreshing(true);
+        try {
+            await onRefresh();
+        } finally {
+            setTimeout(() => setIsRefreshing(false), 500);
+        }
+    };
 
     const filteredSessions = sessions.filter(session => {
         const matchesSearch = session.metadata?.sessionName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -90,6 +103,16 @@ export function SessionSidebar({
                 >
                     <ChevronLeft size={20} className="rotate-180" />
                 </button>
+
+                {onRefresh && (
+                    <button
+                        onClick={handleRefresh}
+                        className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                        title={t('refresh')}
+                    >
+                        <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
+                    </button>
+                )}
 
                 <div className="w-8 h-px bg-gray-800 my-1" />
 
@@ -143,13 +166,24 @@ export function SessionSidebar({
                     <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
                         Pocket AI
                     </h1>
-                    <button
-                        onClick={onToggleCollapse}
-                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors lg:flex hidden"
-                        title="Collapse sidebar"
-                    >
-                        <ChevronLeft size={18} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                        {onRefresh && (
+                            <button
+                                onClick={handleRefresh}
+                                className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                                title={t('refresh')}
+                            >
+                                <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+                            </button>
+                        )}
+                        <button
+                            onClick={onToggleCollapse}
+                            className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors lg:flex hidden"
+                            title="Collapse sidebar"
+                        >
+                            <ChevronLeft size={18} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Search */}

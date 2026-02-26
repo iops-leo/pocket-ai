@@ -391,6 +391,7 @@ export default function DashboardPage() {
                     onDeleteSession={handleDeleteSession}
                     onRenameSession={handleRenameSession}
                     onNewSession={() => setShowNewSessionModal(true)}
+                    onRefresh={() => fetchSessions(false)}
                     isCollapsed={isSidebarCollapsed}
                     onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
                 />
