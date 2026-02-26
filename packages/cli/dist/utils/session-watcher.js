@@ -256,6 +256,7 @@ export class CodexSessionWatcher {
     destroyed = false;
     pollTimeout = null;
     syntheticCallIndex = 0;
+    seenLineHashes = new Set();
     constructor(cwd, onEvent) {
         this.cwd = path.resolve(cwd);
         this.onEvent = onEvent;
@@ -395,6 +396,11 @@ export class CodexSessionWatcher {
                 const trimmed = line.trim();
                 if (!trimmed)
                     continue;
+                // 중복 방지: 동일한 라인은 한 번만 처리 (Codex가 파일을 rewrite할 때 방지)
+                const lineHash = crypto.createHash('sha1').update(trimmed).digest('hex');
+                if (this.seenLineHashes.has(lineHash))
+                    continue;
+                this.seenLineHashes.add(lineHash);
                 const events = this.processLine(trimmed);
                 if (events.length > 0)
                     this.onEvent(events);

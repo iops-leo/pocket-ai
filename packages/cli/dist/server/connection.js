@@ -28,8 +28,14 @@ export function connectToServer(options) {
     });
     socket.on('auth-success', options.onAuthSuccess);
     socket.on('auth-error', async (data) => {
-        if (data.error === 'Invalid session or ownership') {
-            // 서버가 재시작되어 세션이 사라진 경우 → 재등록
+        if (data.error === 'Session deleted') {
+            // 삭제된 세션 → 재등록하지 않고 종료
+            console.log('\n[Pocket AI] 이 세션은 삭제되었습니다. 다시 시작해주세요.');
+            socket.disconnect();
+            process.exit(0);
+        }
+        else if (data.error === 'Invalid session or ownership') {
+            // 서버 재시작 등으로 세션이 사라진 경우 → 재등록
             try {
                 const newSessionId = await registerSession(options.publicKey, options.metadata);
                 currentSessionId = newSessionId;
@@ -47,6 +53,11 @@ export function connectToServer(options) {
     });
     socket.on('key-exchange', options.onKeyExchange);
     socket.on('update', options.onUpdate);
+    socket.on('session-killed', () => {
+        console.log('\n[Pocket AI] 이 세션이 원격으로 삭제되었습니다. 종료합니다.');
+        socket.disconnect();
+        process.exit(0);
+    });
     socket.on('disconnect', options.onDisconnect);
     socket.on('connect_error', (err) => {
         // 서버 다운 시 조용히 재시도 (에러 로그 스팸 방지)

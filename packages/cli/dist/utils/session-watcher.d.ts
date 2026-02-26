@@ -43,6 +43,7 @@ export declare class CodexSessionWatcher implements SessionTranscriptWatcher {
     private destroyed;
     private pollTimeout;
     private syntheticCallIndex;
+    private seenLineHashes;
     constructor(cwd: string, onEvent: (events: SessionPayload[]) => void);
     start(): void;
     destroy(): void;
