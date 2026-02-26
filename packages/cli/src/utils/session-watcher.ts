@@ -806,7 +806,9 @@ export function createSessionTranscriptWatcher(
     }
 
     if (normalizedEngine === 'gemini') {
-        return new GeminiSessionWatcher(cwd, onEvent);
+        // GeminiSessionWatcher의 세션 파일 경로 감지가 CLI 버전별로 불안정함
+        // PTY 텍스트 릴레이(shouldRelayPtyText)를 사용하여 안정적으로 전달
+        return null;
     }
 
     return null;
