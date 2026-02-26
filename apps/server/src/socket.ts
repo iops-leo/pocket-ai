@@ -54,6 +54,10 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
 
             try {
                 const decoded: any = fastify.jwt.verify(token);
+                if (typeof decoded?.sub !== 'string' || !decoded.sub) {
+                    socket.emit('auth-error', { error: 'Invalid token' });
+                    return;
+                }
                 let session = activeSessions.get(sessionId);
 
                 // 메모리에 없으면 DB에서 복원 (서버 재시작 시)
@@ -94,6 +98,7 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                     session.status = 'online';
                     session.socketId = socket.id;
                     socket.join(`session_${sessionId}`);
+                    socket.join(`user_${decoded.sub}`); // 사용자별 룸 (본인 세션 이벤트만 수신)
                     socket.emit('auth-success', { sessionId });
                     fastify.log.info(`Session ${sessionId} online via ${socket.id}`);
 
@@ -114,8 +119,8 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                         .where('id', '=', sessionId)
                         .execute();
 
-                    // PWA에게 세션 온라인 알림 (사이드바 갱신용)
-                    io.emit('session-online', { sessionId, metadata: session.metadata });
+                    // PWA에게 세션 온라인 알림 (해당 사용자만)
+                    io.to(`user_${session.userId}`).emit('session-online', { sessionId, metadata: session.metadata });
                 } else {
                     socket.emit('auth-error', { error: 'Invalid session or ownership' });
                 }
@@ -125,15 +130,42 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
         });
 
         // 2. `session-join`: PWA가 세션 참여
-        socket.on('session-join', (payload: any) => {
+        socket.on('session-join', async (payload: any) => {
             const { sessionId, token } = payload;
 
             try {
                 const decoded: any = fastify.jwt.verify(token);
-                const session = activeSessions.get(sessionId);
+                if (typeof decoded?.sub !== 'string' || !decoded.sub) {
+                    socket.emit('join-error', { error: 'Invalid token' });
+                    return;
+                }
+
+                let session = activeSessions.get(sessionId);
+
+                // 메모리에 없으면 DB에서 복원 (서버 재시작 직후 PWA 접속 시)
+                if (!session) {
+                    const row = await db
+                        .selectFrom('sessions')
+                        .selectAll()
+                        .where('id', '=', sessionId)
+                        .executeTakeFirst();
+
+                    if (row && row.user_id === decoded.sub) {
+                        session = {
+                            sessionId: row.id,
+                            publicKey: row.public_key,
+                            metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+                            status: row.status as 'online' | 'offline',
+                            userId: row.user_id,
+                            socketId: '',
+                        };
+                        activeSessions.set(sessionId, session);
+                    }
+                }
 
                 if (session && session.userId === decoded.sub && session.status === 'online') {
                     socket.join(`session_${sessionId}`);
+                    socket.join(`user_${decoded.sub}`); // 사용자별 룸
                     socket.emit('join-success', { sessionId, publicKey: session.publicKey, metadata: session.metadata });
                     fastify.log.info(`PWA joined session ${sessionId}`);
                 } else {

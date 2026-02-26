@@ -410,7 +410,13 @@ export default function DashboardPage() {
                 {activeSession ? (
                     <TerminalChat
                         sessionId={activeSession}
-                        onBack={() => setActiveSession(null)}
+                        onBack={() => {
+                            setActiveSession(null);
+                            // 모바일에서 뒤로가기 시 사이드바 재오픈
+                            if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                                setIsMobileSidebarOpen(true);
+                            }
+                        }}
                         embedded={true}
                     />
                 ) : (

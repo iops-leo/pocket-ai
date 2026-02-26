@@ -543,7 +543,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     )}
 
                     {/* 입력창 */}
-                    <div className="max-w-3xl mx-auto w-full px-3 pb-4 sm:pb-5 pt-3 flex items-center gap-2">
+                    <div className="max-w-3xl mx-auto w-full px-3 pt-3 flex items-center gap-2" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
                         <div className="flex-1 bg-gray-900 border border-gray-700/60 rounded-2xl flex items-center px-4 py-2 shadow-xl transition-all focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/30">
                             <textarea
                                 ref={textareaRef}

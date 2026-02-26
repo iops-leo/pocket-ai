@@ -38,3 +38,8 @@ logs/
 # Claude Code
 .claude/
 .omc/
+
+# Project Memory System (AI navigation files - local only)
+PLAN.md
+CONTEXT.md
+CHECKLIST.md

@@ -28,6 +28,10 @@ fastify.register(cors, {
 if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
     throw new Error('GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables are required');
 }
+
+// OAuth CSRF 방어용 state 저장소 (10분 TTL)
+const pendingOAuthStates = new Set<string>();
+
 fastify.register(oauthPlugin, {
     name: 'githubOAuth2',
     credentials: {
@@ -44,9 +48,19 @@ fastify.register(oauthPlugin, {
     generateStateFunction: (request: any) => {
         const cliPort = request.query?.cli_port;
         const random = Math.random().toString(36).slice(2, 10);
-        return cliPort ? `${random}_cli_${cliPort}` : random;
+        const state = cliPort ? `${random}_cli_${cliPort}` : random;
+        pendingOAuthStates.add(state);
+        // 10분 후 자동 만료
+        setTimeout(() => pendingOAuthStates.delete(state), 10 * 60 * 1000);
+        return state;
     },
-    checkStateFunction: (_request: any, callback: any) => {
+    checkStateFunction: (request: any, callback: any) => {
+        const state = (request.query as any)?.state as string;
+        if (!state || !pendingOAuthStates.has(state)) {
+            callback(new Error('Invalid OAuth state'));
+            return;
+        }
+        pendingOAuthStates.delete(state);
         callback();
     },
 } as any);

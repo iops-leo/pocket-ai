@@ -15,6 +15,11 @@ interface ActiveSession {
 // 인메모리 스토어 (런타임 상태 캐시)
 export const activeSessions = new Map<string, ActiveSession>();
 
+// JWT decoded.sub 타입 안전 추출 (undefined/비문자열 방어)
+function extractUserId(decoded: any): string | null {
+    return typeof decoded?.sub === 'string' && decoded.sub ? decoded.sub : null;
+}
+
 // 서버 시작 시 DB에서 세션 복원
 export async function loadSessionsFromDB(): Promise<void> {
     try {
@@ -68,12 +73,13 @@ export async function sessionRoutes(fastify: FastifyInstance) {
         const token = request.headers.authorization?.replace('Bearer ', '');
         if (!token) return reply.code(401).send({ error: 'Missing token' });
 
-        let decoded: any;
+        let userId: string | null;
         try {
-            decoded = fastify.jwt.verify(token);
+            userId = extractUserId(fastify.jwt.verify(token));
         } catch {
             return reply.code(401).send({ error: 'Invalid token' });
         }
+        if (!userId) return reply.code(401).send({ error: 'Invalid token' });
 
         const { publicKey, metadata, launcherSessionId, autoStart } = request.body as any;
         if (!publicKey) return reply.code(400).send({ error: 'Missing publicKey' });
@@ -85,7 +91,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
             const launcherSession = activeSessions.get(launcherSessionId);
             if (
                 !launcherSession ||
-                launcherSession.userId !== decoded.sub ||
+                launcherSession.userId !== userId ||
                 launcherSession.status !== 'online'
             ) {
                 return reply.code(409).send({ error: 'Launcher session is offline' });
@@ -100,7 +106,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
             .insertInto('sessions')
             .values({
                 id: sessionId,
-                user_id: decoded.sub,
+                user_id: userId,
                 public_key: publicKey,
                 metadata: metadataStr,
                 status: 'offline',
@@ -113,7 +119,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
             publicKey,
             metadata: metadata ?? {},
             status: 'offline',
-            userId: decoded.sub,
+            userId,
             socketId: '',
         });
 
@@ -139,14 +145,13 @@ export async function sessionRoutes(fastify: FastifyInstance) {
         const token = request.headers.authorization?.replace('Bearer ', '');
         if (!token) return reply.code(401).send({ error: 'Missing token' });
 
-        let decoded: any;
+        let userId: string | null;
         try {
-            decoded = fastify.jwt.verify(token);
+            userId = extractUserId(fastify.jwt.verify(token));
         } catch {
             return reply.code(401).send({ error: 'Invalid token' });
         }
-
-        const userId = decoded.sub;
+        if (!userId) return reply.code(401).send({ error: 'Invalid token' });
         const userSessions = Array.from(activeSessions.values())
             .filter(s => s.userId === userId)
             .sort((a, b) => {
@@ -172,14 +177,13 @@ export async function sessionRoutes(fastify: FastifyInstance) {
         const token = request.headers.authorization?.replace('Bearer ', '');
         if (!token) return reply.code(401).send({ error: 'Missing token' });
 
-        let decoded: any;
+        let userId: string | null;
         try {
-            decoded = fastify.jwt.verify(token);
+            userId = extractUserId(fastify.jwt.verify(token));
         } catch {
             return reply.code(401).send({ error: 'Invalid token' });
         }
-
-        const userId = decoded.sub;
+        if (!userId) return reply.code(401).send({ error: 'Invalid token' });
         const limit = Math.min(Math.max(parseInt(request.query.limit || '8', 10), 1), 20);
 
         const rows = await db
@@ -224,12 +228,13 @@ export async function sessionRoutes(fastify: FastifyInstance) {
         const token = request.headers.authorization?.replace('Bearer ', '');
         if (!token) return reply.code(401).send({ error: 'Missing token' });
 
-        let decoded: any;
+        let userId: string | null;
         try {
-            decoded = fastify.jwt.verify(token);
+            userId = extractUserId(fastify.jwt.verify(token));
         } catch {
             return reply.code(401).send({ error: 'Invalid token' });
         }
+        if (!userId) return reply.code(401).send({ error: 'Invalid token' });
 
         const sessionId = request.params.id;
         const incomingMetadata = (request.body?.metadata && typeof request.body.metadata === 'object')
@@ -245,7 +250,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
             .where('id', '=', sessionId)
             .executeTakeFirst();
 
-        if (!dbSession || dbSession.user_id !== decoded.sub) {
+        if (!dbSession || dbSession.user_id !== userId) {
             return reply.code(403).send({ error: 'Session not found or unauthorized' });
         }
 
@@ -292,15 +297,15 @@ export async function sessionRoutes(fastify: FastifyInstance) {
         const token = request.headers.authorization?.replace('Bearer ', '');
         if (!token) return reply.code(401).send({ error: 'Missing token' });
 
-        let decoded: any;
+        let userId: string | null;
         try {
-            decoded = fastify.jwt.verify(token);
+            userId = extractUserId(fastify.jwt.verify(token));
         } catch {
             return reply.code(401).send({ error: 'Invalid token' });
         }
+        if (!userId) return reply.code(401).send({ error: 'Invalid token' });
 
         const sessionId = request.params.id;
-        const userId = decoded.sub;
 
         // 소유권 확인: 메모리 캐시 또는 DB
         const memSession = activeSessions.get(sessionId);
@@ -347,12 +352,13 @@ export async function sessionRoutes(fastify: FastifyInstance) {
         const token = request.headers.authorization?.replace('Bearer ', '');
         if (!token) return reply.code(401).send({ error: 'Missing token' });
 
-        let decoded: any;
+        let userId: string | null;
         try {
-            decoded = fastify.jwt.verify(token);
+            userId = extractUserId(fastify.jwt.verify(token));
         } catch {
             return reply.code(401).send({ error: 'Invalid token' });
         }
+        if (!userId) return reply.code(401).send({ error: 'Invalid token' });
 
         const sessionId = request.params.id;
         const limit = Math.min(parseInt(request.query.limit || '100'), 200);
@@ -360,7 +366,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
 
         // 세션 소유권 확인
         const session = activeSessions.get(sessionId);
-        if (!session || session.userId !== decoded.sub) {
+        if (!session || session.userId !== userId) {
             // 메모리에 없으면 DB 확인
             const dbSession = await db
                 .selectFrom('sessions')
@@ -368,7 +374,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
                 .where('id', '=', sessionId)
                 .executeTakeFirst();
 
-            if (!dbSession || dbSession.user_id !== decoded.sub) {
+            if (!dbSession || dbSession.user_id !== userId) {
                 return reply.code(403).send({ error: 'Session not found or unauthorized' });
             }
         }
