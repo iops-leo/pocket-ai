@@ -25,9 +25,10 @@ export const loginCommand = new Command('login')
             <body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;background:#030712;color:#f3f4f6">
               <div style="text-align:center">
                 <h1 style="color:#34d399">로그인 성공!</h1>
-                <p>이 창을 닫고 터미널로 돌아가세요.</p>
+                <p style="color:#9ca3af">잠시 후 이 창이 자동으로 닫힙니다.</p>
               </div>
             </body>
+            <script>setTimeout(() => window.close(), 1500);</script>
           </html>
         `);
             console.log('\n✅ 로그인 성공!');
