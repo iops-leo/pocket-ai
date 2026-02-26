@@ -7,6 +7,30 @@ import { sql } from 'kysely';
 // 세션별 메시지 시퀀스 번호 관리 (메모리 캐시)
 const sessionSeqMap = new Map<string, number>();
 
+// Socket.IO per-socket rate limiting (update 이벤트 기준)
+const socketRateStore = new Map<string, { count: number; resetAt: number }>();
+const SOCKET_RATE_WINDOW_MS = 10_000; // 10초
+const SOCKET_RATE_MAX_EVENTS = 60;    // 10초에 60 이벤트 (초당 6개)
+
+function isSocketRateLimited(socketId: string): boolean {
+    const now = Date.now();
+    let record = socketRateStore.get(socketId);
+    if (!record || now > record.resetAt) {
+        record = { count: 0, resetAt: now + SOCKET_RATE_WINDOW_MS };
+        socketRateStore.set(socketId, record);
+    }
+    record.count++;
+    return record.count > SOCKET_RATE_MAX_EVENTS;
+}
+
+// 연결 해제된 소켓 항목 정리 (10분마다)
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, record] of socketRateStore.entries()) {
+        if (now > record.resetAt) socketRateStore.delete(id);
+    }
+}, 10 * 60_000);
+
 async function getNextSeq(sessionId: string): Promise<number> {
     // 캐시에 있으면 사용
     if (sessionSeqMap.has(sessionId)) {
@@ -199,6 +223,10 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
 
         // 4. `update`: 암호화 메시지 중계 + DB 저장 (서버는 복호화하지 않음)
         socket.on('update', async (payload: any) => {
+            if (isSocketRateLimited(socket.id)) {
+                socket.emit('rate-limited', { error: 'Too many events' });
+                return;
+            }
             const { sessionId, sender, body } = payload;
             if (!sessionId || !body) return;
             if (!socket.rooms.has(`session_${sessionId}`)) return;

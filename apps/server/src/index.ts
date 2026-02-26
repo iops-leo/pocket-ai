@@ -20,6 +20,39 @@ fastify.register(jwt, {
     secret: process.env.JWT_SECRET
 });
 
+// Simple in-memory rate limiter (REST API)
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1분
+const RATE_LIMIT_MAX_REQUESTS = 120;  // 분당 120 요청
+
+fastify.addHook('onRequest', async (request, reply) => {
+    // /ping 헬스체크는 제외
+    if (request.url === '/ping') return;
+
+    const ip = request.ip ?? 'unknown';
+    const now = Date.now();
+
+    let record = rateLimitStore.get(ip);
+    if (!record || now > record.resetAt) {
+        record = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
+        rateLimitStore.set(ip, record);
+    }
+
+    record.count++;
+    if (record.count > RATE_LIMIT_MAX_REQUESTS) {
+        reply.code(429).send({ error: 'Too Many Requests' });
+        return;
+    }
+});
+
+// 만료된 항목 정리 (5분마다)
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, record] of rateLimitStore.entries()) {
+        if (now > record.resetAt) rateLimitStore.delete(ip);
+    }
+}, 5 * 60_000);
+
 // Setup CORS
 fastify.register(cors, {
     origin: process.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:3002'],

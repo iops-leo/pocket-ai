@@ -32,6 +32,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const [sessionMeta, setSessionMeta] = useState<SessionMeta>({});
     const [isAiThinking, setIsAiThinking] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [systemError, setSystemError] = useState<string | null>(null);
 
     // 슬래시 명령어
     const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(() => {
@@ -55,6 +56,13 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const loadMessageHistoryRef = useRef<(key: CryptoKey, options?: { silent?: boolean }) => Promise<void>>(async () => { });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const initConnectionRef = useRef<(socket: any) => Promise<void>>(async () => { });
+
+    // 시스템 에러 자동 해제 (8초)
+    useEffect(() => {
+        if (!systemError) return;
+        const timer = setTimeout(() => setSystemError(null), 8000);
+        return () => clearTimeout(timer);
+    }, [systemError]);
 
     // 텍스트에어리어 높이 자동 조절
     const adjustTextareaHeight = useCallback(() => {
@@ -183,24 +191,15 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     }, 5000);
                 } catch (e) {
                     console.error('E2E Setup Failed', e);
-                    setMessages(prev => [...prev, {
-                        kind: 'text',
-                        id: crypto.randomUUID(),
-                        role: 'assistant' as const,
-                        content: '[Pocket AI] E2E Setup Failed.\n'
-                    }]);
+                    setSystemError('E2E 보안 채널 설정에 실패했습니다. 페이지를 새로고침 해주세요.');
+                    setIsConnecting(false);
                 }
             });
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             socket.once('join-error', (err: any) => {
                 console.error('Failed to join session', err);
-                setMessages(prev => [...prev, {
-                    kind: 'text',
-                    id: crypto.randomUUID(),
-                    role: 'assistant' as const,
-                    content: `[Pocket AI] Failed to join session: ${err.error}\n`
-                }]);
+                setSystemError(`세션 연결 실패: ${err.error ?? '세션이 오프라인 상태입니다.'}`);
                 setIsConnecting(false);
             });
         } catch (err) {
@@ -482,6 +481,20 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     )}
                 </div>
             </header>
+
+            {/* 시스템 에러 배너 */}
+            {systemError && (
+                <div className="flex-none bg-red-900/40 border-b border-red-800/60 px-4 py-2 flex items-center gap-2 z-20">
+                    <span className="text-red-300 text-xs font-medium flex-1">{systemError}</span>
+                    <button
+                        onClick={() => setSystemError(null)}
+                        className="text-red-400 hover:text-red-200 text-lg leading-none flex-shrink-0"
+                        aria-label="닫기"
+                    >
+                        ×
+                    </button>
+                </div>
+            )}
 
             {/* Main chat area */}
             <main className="flex-1 relative w-full min-h-0 bg-gray-950 flex flex-col">

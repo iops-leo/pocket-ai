@@ -36,6 +36,8 @@ export async function loadSessionsFromDB(): Promise<void> {
                 status: 'offline', // 재시작 후 모두 offline → CLI 재연결 시 online으로 전환
                 userId: row.user_id,
                 socketId: '',
+                // offlineSince 설정: DB cleanup과 메모리 cleanup 기준 통일
+                offlineSince: row.updated_at instanceof Date ? row.updated_at.getTime() : Date.now(),
             });
         }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, FolderOpen, Cpu, Terminal, Loader2, Pin, PinOff, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
@@ -45,6 +45,7 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
     const [hiddenPaths, setHiddenPaths] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
 
     const enabledEngineSet = useMemo(() => {
         const source = enabledEngines ?? ENGINES.map(item => item.id);
@@ -87,6 +88,50 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
     useEffect(() => {
         localStorage.setItem(RECENT_PATH_HIDDEN_KEY, JSON.stringify(hiddenPaths));
     }, [hiddenPaths]);
+
+    // 포커스 트랩 + Escape 닫기
+    useEffect(() => {
+        const panel = panelRef.current;
+        if (!panel) return;
+
+        // 모달 마운트 시 첫 번째 포커스 가능 요소에 포커스
+        const focusable = panel.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        focusable[0]?.focus();
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onClose();
+                return;
+            }
+            if (e.key !== 'Tab') return;
+
+            const elements = panel.querySelectorAll<HTMLElement>(
+                'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            );
+            if (elements.length === 0) return;
+
+            const first = elements[0];
+            const last = elements[elements.length - 1];
+
+            if (e.shiftKey) {
+                if (document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                }
+            } else {
+                if (document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [onClose]);
 
     const availableRecentEngines = useMemo(() => {
         return Array.from(new Set(recentPaths.map(path => path.engine).filter(Boolean))) as string[];
@@ -144,11 +189,16 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-            <div className="w-full max-w-md bg-gray-900 rounded-2xl border border-gray-800 shadow-2xl">
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-session-modal-title"
+        >
+            <div ref={panelRef} className="w-full max-w-md bg-gray-900 rounded-2xl border border-gray-800 shadow-2xl">
                 {/* Header */}
                 <div className="flex items-center justify-between p-5 border-b border-gray-800">
-                    <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <h2 id="new-session-modal-title" className="text-lg font-semibold text-white flex items-center gap-2">
                         <Terminal size={20} className="text-blue-400" />
                         {t('newSession')}
                     </h2>
