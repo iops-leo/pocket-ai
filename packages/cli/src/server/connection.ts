@@ -48,13 +48,11 @@ export function connectToServer(options: ConnectOptions): Socket {
   socket.on('auth-success', options.onAuthSuccess);
 
   socket.on('auth-error', async (data: { error: string }) => {
-    if (data.error === 'Session deleted') {
-      // 삭제된 세션 → 재등록하지 않고 종료
-      console.log('\n[Pocket AI] 이 세션은 삭제되었습니다. 다시 시작해주세요.');
-      socket.disconnect();
-      process.exit(0);
-    } else if (data.error === 'Invalid session or ownership') {
-      // 서버 재시작 등으로 세션이 사라진 경우 → 재등록
+    if (data.error === 'Session deleted' || data.error === 'Invalid session or ownership') {
+      // 삭제됐거나 없는 세션 → 새 세션 자동 등록
+      if (data.error === 'Session deleted') {
+        console.log('\n[Pocket AI] 기존 세션이 삭제되었습니다. 새 세션을 자동으로 생성합니다...');
+      }
       try {
         const newSessionId = await registerSession(options.publicKey, options.metadata);
         currentSessionId = newSessionId;
