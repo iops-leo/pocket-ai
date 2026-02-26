@@ -234,6 +234,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
             setIsConnecting(false);
             sharedSecretRef.current = null;
             sessionKeyRef.current = null;
+            historyLoadedRef.current = false; // 재연결 시 새 메시지 다시 로드
             // 1.5초 grace period: 빠른 재연결 시 오버레이 표시 안 함
             disconnectTimerRef.current = setTimeout(() => {
                 setIsDisconnected(true);
