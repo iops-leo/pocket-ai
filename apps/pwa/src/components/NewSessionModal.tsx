@@ -57,11 +57,11 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
     }, [enabledEngines]);
 
     useEffect(() => {
+        if (engine === CUSTOM_ENGINE_ID) return;
         if (enabledEngineSet.has(engine)) return;
         const nextEnabled = PRESET_ENGINES.find(item => enabledEngineSet.has(item.id))?.id;
-        if (nextEnabled) {
-            setEngine(nextEnabled);
-        }
+        // 사용 가능한 프리셋 엔진이 없으면 Custom으로 폴백
+        setEngine(nextEnabled ?? CUSTOM_ENGINE_ID);
     }, [enabledEngineSet, engine]);
 
     useEffect(() => {
