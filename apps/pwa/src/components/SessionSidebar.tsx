@@ -89,7 +89,7 @@ export function SessionSidebar({
         return matchesSearch && matchesEngine;
     });
 
-    // Group by online/offline
+    // Group by online/offline (서버가 createdAt DESC로 이미 정렬해서 반환)
     const onlineSessions = filteredSessions.filter(s => s.status === 'online');
     const offlineSessions = filteredSessions.filter(s => s.status !== 'online');
 
@@ -121,13 +121,13 @@ export function SessionSidebar({
                     <button
                         key={session.sessionId}
                         onClick={() => onSelectSession(session.sessionId)}
-                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${activeSessionId === session.sessionId
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+                        className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 outline-none shadow-sm ${activeSessionId === session.sessionId
+                            ? 'bg-blue-600 text-white ring-2 ring-blue-500/50 shadow-blue-900/40'
+                            : 'bg-gray-800/80 text-gray-400 border border-gray-700/50 hover:bg-gray-700 hover:text-white'
                             }`}
                         title={session.metadata?.sessionName || session.metadata?.hostname || session.sessionId.slice(0, 8)}
                     >
-                        <span className="text-xs font-mono font-bold">
+                        <span className="text-sm font-bold tracking-wider">
                             {(session.metadata?.sessionName || session.metadata?.hostname || session.sessionId).slice(0, 2).toUpperCase()}
                         </span>
                     </button>
@@ -161,9 +161,9 @@ export function SessionSidebar({
     return (
         <div className="w-72 h-full bg-gray-900 border-r border-gray-800 flex flex-col">
             {/* Header */}
-            <div className="p-4 border-b border-gray-800">
-                <div className="flex items-center justify-between mb-4">
-                    <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+            <div className="p-4 border-b border-gray-800/80 bg-gray-900/40">
+                <div className="flex items-center justify-between mb-5">
+                    <h1 className="text-lg font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 drop-shadow-sm">
                         Pocket AI
                     </h1>
                     <div className="flex items-center gap-1">
@@ -187,26 +187,26 @@ export function SessionSidebar({
                 </div>
 
                 {/* Search */}
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+                <div className="relative group">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-400 transition-colors" size={15} />
                     <input
                         type="text"
                         placeholder={t('searchPlaceholder')}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+                        className="w-full pl-10 pr-4 py-2 bg-gray-950/50 border border-gray-800/80 rounded-xl text-sm text-gray-200 placeholder-gray-500/70 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all shadow-inner"
                     />
                 </div>
 
                 {/* Engine Filter */}
-                <div className="flex gap-1 mt-3">
+                <div className="flex p-1 mt-4 bg-gray-950/60 rounded-xl border border-gray-800/60">
                     {['all', 'claude', 'gemini', 'codex'].map(engine => (
                         <button
                             key={engine}
                             onClick={() => setEngineFilter(engine)}
-                            className={`flex-1 px-2 py-1.5 text-xs rounded-md transition-colors ${engineFilter === engine
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                            className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${engineFilter === engine
+                                ? 'bg-gray-800 text-white shadow-sm ring-1 ring-gray-700'
+                                : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'
                                 }`}
                         >
                             {engine === 'all' ? t('allEngines') : engine.charAt(0).toUpperCase() + engine.slice(1)}
@@ -215,14 +215,13 @@ export function SessionSidebar({
                 </div>
             </div>
 
-            {/* Session List */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto px-2 py-3 space-y-6 custom-scrollbar">
                 {/* Online Sessions */}
                 {onlineSessions.length > 0 && (
-                    <div className="py-2">
-                        <div className="px-4 py-1.5 text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center gap-2">
-                            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                            {t('online')} ({onlineSessions.length})
+                    <div className="space-y-1.5">
+                        <div className="px-3 py-1 text-[11px] font-semibold text-gray-500 uppercase tracking-widest flex items-center gap-2 mb-2">
+                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+                            {t('online')} <span className="text-gray-600 font-medium">({onlineSessions.length})</span>
                         </div>
                         {onlineSessions.map(session => (
                             <SessionItem
@@ -239,10 +238,10 @@ export function SessionSidebar({
 
                 {/* Offline Sessions */}
                 {offlineSessions.length > 0 && (
-                    <div className="py-2">
-                        <div className="px-4 py-1.5 text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center gap-2">
-                            <span className="w-2 h-2 bg-gray-600 rounded-full" />
-                            {t('offline')} ({offlineSessions.length})
+                    <div className="space-y-1.5">
+                        <div className="px-3 py-1 text-[11px] font-semibold text-gray-500 uppercase tracking-widest flex items-center gap-2 mb-2 opacity-80">
+                            <span className="w-1.5 h-1.5 bg-gray-600 rounded-full" />
+                            {t('offline')} <span className="text-gray-600 font-medium">({offlineSessions.length})</span>
                         </div>
                         {offlineSessions.map(session => (
                             <SessionItem
@@ -270,18 +269,18 @@ export function SessionSidebar({
             </div>
 
             {/* Footer */}
-            <div className="p-3 border-t border-gray-800">
+            <div className="p-4 border-t border-gray-800/80 bg-gray-900/40 mt-auto">
                 <button
                     onClick={onNewSession}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-sm transition-colors"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium text-sm transition-all shadow-lg active:scale-[0.98]"
                 >
-                    <Plus size={16} />
+                    <Plus size={16} strokeWidth={2.5} />
                     {t('newSession')}
                 </button>
 
                 <Link
                     href="/settings"
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 mt-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg text-sm transition-colors"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 mt-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-xl text-sm font-medium transition-all"
                 >
                     <Settings size={16} />
                     {t('settings')}
@@ -325,16 +324,16 @@ function SessionItem({
             <button
                 onClick={onClick}
                 disabled={disabled}
-                className={`w-full px-4 py-3 flex items-start gap-3 transition-all ${isActive
-                        ? 'bg-blue-600/20 border-l-2 border-blue-500'
-                        : disabled
-                            ? 'opacity-50 cursor-not-allowed'
-                            : 'hover:bg-gray-800/50 border-l-2 border-transparent'
+                className={`w-full px-3 py-2.5 flex items-start gap-3 rounded-xl transition-all duration-200 outline-none ${isActive
+                    ? 'bg-blue-500/10 ring-1 ring-blue-500/30 text-white'
+                    : disabled
+                        ? 'opacity-40 cursor-not-allowed text-gray-400'
+                        : 'hover:bg-gray-800/60 text-gray-300 hover:text-white border border-transparent'
                     }`}
             >
                 {/* Status indicator */}
-                <div className="flex-shrink-0 mt-1">
-                    <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-gray-600'}`} />
+                <div className="flex-shrink-0 mt-[4px]">
+                    <div className={`w-2 h-2 rounded-full ${isOnline ? (isActive ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.4)]') : 'bg-gray-600'}`} />
                 </div>
 
                 {/* Content */}
@@ -358,15 +357,15 @@ function SessionItem({
                                 }}
                                 onBlur={() => setIsEditing(false)}
                                 onClick={(e) => e.stopPropagation()}
-                                className="bg-gray-800 text-white text-sm font-medium rounded px-1.5 py-0.5 w-full border border-blue-500/50 focus:outline-none"
+                                className="bg-gray-950 text-white text-sm font-semibold rounded-md px-2 py-0.5 w-full border border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/50 shadow-inner"
                             />
                         ) : (
-                            <span className="font-medium text-sm text-white truncate">
+                            <span className="font-semibold text-[13px] truncate tracking-wide">
                                 {displayName}
                             </span>
                         )}
                         <span
-                            className={`px-1.5 py-0.5 text-[10px] rounded-md border font-medium flex-shrink-0 ${getEngineBadgeClass(session.metadata?.engine)}`}
+                            className={`px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase rounded-md border flex-shrink-0 ${getEngineBadgeClass(session.metadata?.engine)}`}
                             title={`Engine: ${getEngineLabel(session.metadata?.engine)}`}
                         >
                             {getEngineLabel(session.metadata?.engine)}
@@ -374,13 +373,13 @@ function SessionItem({
                     </div>
 
                     {shortPath && (
-                        <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500 truncate">
-                            <FolderOpen size={10} className="flex-shrink-0" />
+                        <div className={`flex items-center gap-1.5 mt-1 text-[11px] truncate ${isActive ? 'text-blue-200/70' : 'text-gray-500'}`}>
+                            <FolderOpen size={11} className="flex-shrink-0" />
                             <span className="truncate font-mono">{shortPath}</span>
                         </div>
                     )}
 
-                    <div className="text-xs text-gray-600 mt-0.5 font-mono">
+                    <div className={`text-[10px] mt-1 font-mono uppercase tracking-wider ${isActive ? 'text-blue-300/50' : 'text-gray-600'}`}>
                         {session.sessionId.slice(0, 8)}
                     </div>
                 </div>

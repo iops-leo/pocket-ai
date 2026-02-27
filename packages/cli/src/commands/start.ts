@@ -233,6 +233,9 @@ export async function startSession(command: string = 'claude', options: StartOpt
       .catch(() => { });
   }
 
+  // PWA 재연결 시 pending permissions 재전송용 (Claude 전용, bridge 생성 후 설정)
+  let getPendingInputRequests: (() => import('@pocket-ai/wire').SessionMessageInputRequest[]) | null = null;
+
   // ─── 공통 서버 연결 옵션 (엔진 불문) ───
   function buildServerOptions(onPwaMessage: (msg: Record<string, unknown>) => void) {
     return {
@@ -266,6 +269,15 @@ export async function startSession(command: string = 'claude', options: StartOpt
               console.log(`[Pocket AI] 슬래시 명령어 ${commands.length}개 전송 완료`);
             }
           } catch { /* 비치명적 */ }
+
+          // PWA 재연결 시 응답 대기 중인 permission 요청 재전송
+          if (getPendingInputRequests) {
+            const pending = getPendingInputRequests();
+            for (const req of pending) {
+              relayEvent(req);
+              console.log(`[Pocket AI] Pending permission 재전송: ${req.toolName}`);
+            }
+          }
         } catch (err) {
           console.error('[Pocket AI] 키교환 실패:', err);
         }
@@ -311,6 +323,7 @@ export async function startSession(command: string = 'claude', options: StartOpt
       },
     });
 
+    getPendingInputRequests = () => bridge.getPendingInputRequests();
     bridge.start();
 
     // 로컬 stdin → Claude (headless가 아닌 경우)
@@ -338,6 +351,11 @@ export async function startSession(command: string = 'claude', options: StartOpt
             msg.approved as boolean,
             msg.message as string | undefined,
           );
+        }
+        // PWA → Claude: 인터럽트 (응답 중단)
+        if (msg.t === 'session-event' && (msg as any).event === 'interrupt') {
+          bridge.interrupt();
+          console.log('[Pocket AI] 인터럽트 신호 전송');
         }
       }));
 

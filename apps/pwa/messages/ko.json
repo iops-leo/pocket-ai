@@ -97,6 +97,7 @@
   "chat": {
     "slashCommandsTitle": "슬래시 명령어",
     "slashCommandsHint": "↑↓ 이동 · Tab/Enter 선택 · Esc 닫기",
+    "stopGeneration": "생성 중단",
     "sessionReady": "세션 연결됨",
     "sessionReadyHint1": "AI에게 메시지를 보내세요.",
     "sessionReadyHint2": "응답은 실시간으로 표시됩니다.",

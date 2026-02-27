@@ -424,6 +424,19 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         }
     }, [isDisconnected, sessionId]);
 
+    const handleInterrupt = useCallback(async () => {
+        const encryptKey = sessionKeyRef.current || sharedSecretRef.current;
+        if (!socketRef.current || !encryptKey || isDisconnected) return;
+        try {
+            const msgStr = JSON.stringify({ t: 'session-event', event: 'interrupt' });
+            const encryptedBody = await encrypt(msgStr, encryptKey);
+            socketRef.current.emit('update', { sessionId, sender: 'pwa', body: encryptedBody });
+            setIsAiThinking(false);
+        } catch (err) {
+            console.error('Failed to send interrupt', err);
+        }
+    }, [isDisconnected, sessionId]);
+
     const handleSend = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         const encryptKey = sessionKeyRef.current || sharedSecretRef.current;
@@ -630,10 +643,23 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                         </button>
                     </div>
 
-                    {/* Shift+Enter 힌트 */}
-                    <p className="max-w-3xl mx-auto text-[10px] text-gray-700 text-center pb-2">
-                        <kbd className="font-mono">Shift+Enter</kbd> 줄바꿈 · <kbd className="font-mono">Enter</kbd> 전송
-                    </p>
+                    {/* 하단 힌트 / 중단 버튼 */}
+                    <div className="max-w-3xl mx-auto flex items-center justify-center pb-2 gap-3">
+                        {isAiThinking ? (
+                            <button
+                                type="button"
+                                onClick={handleInterrupt}
+                                className="flex items-center gap-1.5 px-3 py-1 text-[11px] text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-full transition-colors"
+                            >
+                                <span className="w-2 h-2 rounded-sm bg-red-400 inline-block" />
+                                {t('stopGeneration')}
+                            </button>
+                        ) : (
+                            <p className="text-[10px] text-gray-700">
+                                <kbd className="font-mono">Shift+Enter</kbd> 줄바꿈 · <kbd className="font-mono">Enter</kbd> 전송
+                            </p>
+                        )}
+                    </div>
                 </div>
             </main>
         </div>

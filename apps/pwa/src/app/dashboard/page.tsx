@@ -21,6 +21,7 @@ interface Session {
     };
     status: string;
     lastPing?: number;
+    createdAt?: number;
 }
 
 interface RecentPathItem {
@@ -35,6 +36,7 @@ export default function DashboardPage() {
     const t = useTranslations('dashboard');
     const [sessions, setSessions] = useState<Session[]>([]);
     const [activeSession, setActiveSession] = useState<string | null>(null);
+    const [mountedSessions, setMountedSessions] = useState<string[]>([]);
     const [recentPaths, setRecentPaths] = useState<RecentPathItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -188,6 +190,7 @@ export default function DashboardPage() {
 
     const handleSelectSession = (sessionId: string) => {
         setActiveSession(sessionId);
+        setMountedSessions(prev => prev.includes(sessionId) ? prev : [...prev, sessionId]);
         setIsMobileSidebarOpen(false); // Close mobile sidebar when selecting
     };
 
@@ -334,6 +337,7 @@ export default function DashboardPage() {
             if (data.success) {
                 // 로컬 상태에서 즉시 제거
                 setSessions(prev => prev.filter(s => s.sessionId !== sessionId));
+                setMountedSessions(prev => prev.filter(s => s !== sessionId));
                 if (activeSession === sessionId) {
                     setActiveSession(null);
                 }
@@ -402,46 +406,52 @@ export default function DashboardPage() {
             {/* Main content area */}
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Mobile header - only visible on mobile */}
-                <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-800 bg-gray-900">
+                <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-800/80 bg-gray-900/60 backdrop-blur-md sticky top-0 z-30">
                     <button
                         onClick={() => setIsMobileSidebarOpen(true)}
-                        className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                        className="p-2 -ml-2 text-gray-400 hover:text-white hover:bg-gray-800/80 rounded-lg transition-colors"
                     >
-                        <Menu size={24} />
+                        <Menu size={22} />
                     </button>
-                    <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+                    <h1 className="text-lg font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 drop-shadow-sm">
                         Pocket AI
                     </h1>
-                    <div className="w-10" /> {/* Spacer for centering */}
+                    <div className="w-8" /> {/* Spacer for centering */}
                 </div>
 
                 {/* Chat area or empty state */}
-                {activeSession ? (
-                    <TerminalChat
-                        sessionId={activeSession}
-                        onBack={() => {
-                            setActiveSession(null);
-                            // 모바일에서 뒤로가기 시 사이드바 재오픈
-                            if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-                                setIsMobileSidebarOpen(true);
-                            }
-                        }}
-                        embedded={true}
-                    />
-                ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-8">
-                        <div className="w-16 h-16 rounded-2xl bg-gray-800/50 flex items-center justify-center border border-gray-700/40 mb-6">
-                            <Terminal size={28} className="text-gray-500" />
+                {/* 한 번 마운트된 세션은 언마운트하지 않고 CSS로 show/hide (소켓 재연결 방지) */}
+                {mountedSessions.map(sessionId => (
+                    <div key={sessionId} className={activeSession === sessionId ? 'contents' : 'hidden'}>
+                        <TerminalChat
+                            sessionId={sessionId}
+                            onBack={() => {
+                                setActiveSession(null);
+                                if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                                    setIsMobileSidebarOpen(true);
+                                }
+                            }}
+                            embedded={true}
+                        />
+                    </div>
+                ))}
+                {!activeSession && (
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-8 bg-gray-950/50">
+                        <div className="relative mb-6">
+                            <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full" />
+                            <div className="relative w-16 h-16 rounded-2xl bg-gray-900 flex items-center justify-center border border-gray-800/80 shadow-2xl">
+                                <Terminal size={28} className="text-blue-400/80" />
+                            </div>
                         </div>
-                        <h2 className="text-xl font-semibold text-gray-300 mb-2">{t('selectSession')}</h2>
+                        <h2 className="text-xl font-semibold text-gray-200 mb-2 tracking-tight">{t('selectSession')}</h2>
                         <p className="text-sm text-gray-500 text-center max-w-sm">
                             {t('selectSessionHint')}
                         </p>
 
                         {sessions.length === 0 && (
-                            <div className="mt-8 p-6 bg-gray-900/50 border border-gray-800 rounded-xl max-w-md text-center">
+                            <div className="mt-8 p-6 bg-gray-900/40 border border-gray-800/80 rounded-2xl max-w-md text-center shadow-inner">
                                 <p className="text-gray-400 text-sm mb-2">{t('noSessions')}</p>
-                                <p className="text-gray-500 text-xs font-mono">
+                                <p className="text-gray-500 text-xs font-mono bg-gray-950/50 inline-block px-3 py-1.5 rounded-lg border border-gray-800/50 mt-1">
                                     {t('noSessionsHint', { command: 'pocket-ai' })}
                                 </p>
                             </div>
@@ -452,9 +462,8 @@ export default function DashboardPage() {
 
             {/* Toast 알림 */}
             {toast && (
-                <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-sm font-medium shadow-xl transition-all ${
-                    toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'
-                }`}>
+                <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-sm font-medium shadow-xl transition-all ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'
+                    }`}>
                     {toast.message}
                 </div>
             )}

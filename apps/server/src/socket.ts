@@ -100,6 +100,7 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                             status: 'offline',
                             userId: row.user_id,
                             socketId: '',
+                            createdAt: row.created_at ? new Date(row.created_at).getTime() : undefined,
                         };
                         activeSessions.set(sessionId, session);
                     } else if (!row) {
@@ -199,6 +200,7 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                             status: row.status as 'online' | 'offline',
                             userId: row.user_id,
                             socketId: '',
+                            createdAt: row.created_at ? new Date(row.created_at).getTime() : undefined,
                         };
                         activeSessions.set(sessionId, session);
                     }

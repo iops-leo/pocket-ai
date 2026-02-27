@@ -4,6 +4,7 @@ interface StartOptions {
     cwd?: string;
     attachSession?: string;
     headless?: boolean;
+    cmd?: string;
 }
 /**
  * AI CLI 세션 시작 (Happy 스타일 심플 래퍼)

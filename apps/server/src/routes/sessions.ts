@@ -10,6 +10,7 @@ interface ActiveSession {
     userId: string;
     socketId: string;
     offlineSince?: number;
+    createdAt?: number; // epoch ms — 세션 목록 정렬용
 }
 
 // 인메모리 스토어 (런타임 상태 캐시)
@@ -38,6 +39,7 @@ export async function loadSessionsFromDB(): Promise<void> {
                 socketId: '',
                 // offlineSince 설정: DB cleanup과 메모리 cleanup 기준 통일
                 offlineSince: row.updated_at instanceof Date ? row.updated_at.getTime() : Date.now(),
+                createdAt: row.created_at instanceof Date ? row.created_at.getTime() : undefined,
             });
         }
 
@@ -123,6 +125,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
             status: 'offline',
             userId,
             socketId: '',
+            createdAt: Date.now(),
         });
 
         if (autoStart && launcherSessionId) {
@@ -160,13 +163,14 @@ export async function sessionRoutes(fastify: FastifyInstance) {
                 if (a.status !== b.status) {
                     return a.status === 'online' ? -1 : 1; // online 우선
                 }
-                return b.sessionId.localeCompare(a.sessionId);
+                return (b.createdAt ?? 0) - (a.createdAt ?? 0); // 최신 세션 우선
             })
             .map(s => ({
                 sessionId: s.sessionId,
                 publicKey: s.publicKey,
                 metadata: s.metadata,
                 status: s.status,
+                createdAt: s.createdAt,
             }));
 
         return { success: true, data: userSessions };

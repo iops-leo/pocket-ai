@@ -97,6 +97,7 @@
   "chat": {
     "slashCommandsTitle": "Slash Commands",
     "slashCommandsHint": "↑↓ Navigate · Tab/Enter Select · Esc Close",
+    "stopGeneration": "Stop generation",
     "sessionReady": "Session Connected",
     "sessionReadyHint1": "Send a message to the AI.",
     "sessionReadyHint2": "Responses will appear in real time.",

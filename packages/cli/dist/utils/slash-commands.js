@@ -103,6 +103,27 @@ function scanPluginCommands(pluginsDir, commands) {
     walk(pluginsDir, 0);
 }
 /**
+ * Claude 내장 슬래시 명령어 (하드코딩)
+ */
+const CLAUDE_BUILTIN_COMMANDS = [
+    { name: 'help', source: 'global' },
+    { name: 'clear', source: 'global' },
+    { name: 'compact', source: 'global' },
+    { name: 'cost', source: 'global' },
+    { name: 'doctor', source: 'global' },
+    { name: 'exit', source: 'global' },
+    { name: 'init', source: 'global' },
+    { name: 'login', source: 'global' },
+    { name: 'logout', source: 'global' },
+    { name: 'memory', source: 'global' },
+    { name: 'model', source: 'global' },
+    { name: 'pr-comments', source: 'global' },
+    { name: 'review', source: 'global' },
+    { name: 'status', source: 'global' },
+    { name: 'terminal', source: 'global' },
+    { name: 'vim', source: 'global' },
+];
+/**
  * Codex/Gemini 기본 슬래시 명령어 (하드코딩)
  */
 const CODEX_DEFAULT_COMMANDS = [
@@ -123,8 +144,16 @@ const GEMINI_DEFAULT_COMMANDS = [
 export function collectSlashCommands(engine, cwd) {
     const normalized = engine.trim().toLowerCase();
     switch (normalized) {
-        case 'claude':
-            return scanClaudeCommands(cwd);
+        case 'claude': {
+            const custom = scanClaudeCommands(cwd);
+            // 내장 명령어 + 커스텀 명령어 병합 (커스텀이 같은 이름이면 우선)
+            const merged = new Map();
+            for (const cmd of CLAUDE_BUILTIN_COMMANDS)
+                merged.set(cmd.name, cmd);
+            for (const cmd of custom)
+                merged.set(cmd.name, cmd);
+            return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name));
+        }
         case 'codex':
             return CODEX_DEFAULT_COMMANDS;
         case 'gemini':
