@@ -12,6 +12,10 @@ import { createSessionTranscriptWatcher } from '../utils/session-watcher.js';
 import { collectSlashCommands } from '../utils/slash-commands.js';
 import { ClaudeStreamBridge } from '../utils/claude-stream.js';
 import { PtyPromptDetector } from '../utils/pty-prompt-detector.js';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 interface StartOptions {
   remote?: boolean;
@@ -301,8 +305,47 @@ export async function startSession(command: string = 'claude', options: StartOpt
 
   if (useClaude) {
     // ════════════════════════════════════════════════════
-    // Claude 전용: JSON 스트리밍 브릿지
+    // Claude 전용: JSON 스트리밍 브릿지 및 MCP 오케스트레이터
     // ════════════════════════════════════════════════════
+
+    // 1. MCP 오케스트레이터 서버 스폰
+    const mcpServerPath = path.resolve(__dirname, '..', 'mcp', 'orchestrator-server.js');
+    let mcpProcess: import('child_process').ChildProcess | null = null;
+
+    if (fs.existsSync(mcpServerPath)) {
+      mcpProcess = spawn(process.execPath, [mcpServerPath], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+        detached: true,
+      });
+      mcpProcess.unref();
+
+      // ~/.claude/claude.json 에 MCP 서버 자동 등록
+      const claudeConfigPath = path.join(os.homedir(), '.claude', 'claude.json');
+      try {
+        let config: any = {};
+        if (fs.existsSync(claudeConfigPath)) {
+          config = JSON.parse(fs.readFileSync(claudeConfigPath, 'utf-8'));
+        }
+        if (!config.mcpServers) config.mcpServers = {};
+
+        const orchestratorCmd = process.execPath;
+        const orchestratorArgs = [mcpServerPath];
+
+        // 현재 설정과 다르면 업데이트
+        const currentMcp = config.mcpServers['pocket-ai-orchestrator'];
+        if (!currentMcp || currentMcp.command !== orchestratorCmd || currentMcp.args?.[0] !== orchestratorArgs[0]) {
+          config.mcpServers['pocket-ai-orchestrator'] = {
+            command: orchestratorCmd,
+            args: orchestratorArgs
+          };
+          fs.mkdirSync(path.dirname(claudeConfigPath), { recursive: true });
+          fs.writeFileSync(claudeConfigPath, JSON.stringify(config, null, 2), 'utf-8');
+          console.log('[Pocket AI] Multi-Model Orchestrator MCP 등록 완료');
+        }
+      } catch (err: any) {
+        console.error('[Pocket AI] MCP 서버 설정 등록 실패:', err.message);
+      }
+    }
 
     const bridge = new ClaudeStreamBridge({
       cwd,
@@ -386,6 +429,9 @@ export async function startSession(command: string = 'claude', options: StartOpt
     const cleanup = () => {
       bridge.kill();
       if (socket) socket.disconnect();
+      if (mcpProcess) {
+        try { process.kill(-mcpProcess.pid!); } catch { }
+      }
       process.exit(0);
     };
     process.on('SIGINT', cleanup);
