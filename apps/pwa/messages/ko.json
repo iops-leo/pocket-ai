@@ -13,7 +13,7 @@
   "landing": {
     "heroBadge": "새로운 방식의 CLI 제어",
     "heroTitle": "내 손안의 강력한 AI 에이전트",
-    "heroSubtitle": "어디서든 웹 브라우저만 있으면 내 PC의 터미널 환경과 완벽하게 연동되는 AI 비서를 제어하세요. 강력한 모델들을 원격으로 호출하세요.",
+    "heroSubtitle": "어디서든 웹 브라우저만 있으면 내 PC의 터미널 환경과 <br className=\"hidden sm:block\" />완벽하게 연동되는 AI 비서를 제어하세요.<br className=\"hidden sm:block\" /> 강력한 모델들을 원격으로 호출하세요.",
     "ctaStart": "GitHub로 시작하기",
     "ctaDashboard": "대시보드로 이동",
     "featureE2E": "강력한 종단간 암호화",
@@ -23,7 +23,7 @@
     "featureAnywhere": "어디서나 접근 가능한 PWA",
     "featureAnywhereDesc": "스마트폰, 태블릿, 다른 PC 어느 브라우저에서든 앱처럼 설치하고 즉시 내 작업 환경에 접근하세요.",
     "mockupHeader": "pocket-ai@macbook:~",
-    "mockupLine1": "$ pocket-ai start --engine claude-3-5-sonnet",
+    "mockupLine1": "$ pocket-ai",
     "mockupLine2": "Pocket AI Daemon Started.",
     "mockupLine3": "Listening securely for Web CLI connections...",
     "footer": "Pocket AI - Your Portable CLI Agent."
@@ -146,6 +146,29 @@
     "permissionApproved": "허용됨",
     "permissionDenied": "거부됨",
     "selectionRequest": "선택 요청"
+  },
+  "chatSettings": {
+    "title": "세션 설정",
+    "permissionMode": "PERMISSION MODE",
+    "permDefault": "Default",
+    "permDefaultDesc": "도구 사용 시 매번 확인 요청",
+    "permAcceptEdits": "Accept Edits",
+    "permAcceptEditsDesc": "파일 편집/생성 작업 자동 허용",
+    "permPlanMode": "Plan Mode",
+    "permPlanModeDesc": "모든 실행 작업 자동 거부 (읽기 전용)",
+    "permYolo": "Yolo",
+    "permYoloDesc": "모든 도구 사용 자동 허용 (주의)",
+    "model": "MODEL",
+    "modelDefault": "Default",
+    "modelDefaultDesc": "CLI 설정 사용",
+    "modelAdaptive": "Adaptive Usage",
+    "modelAdaptiveDesc": "Balanced model routing",
+    "modelSonnet": "Sonnet",
+    "modelSonnetDesc": "빠르고 강력한 모델",
+    "modelOpus": "Opus",
+    "modelOpusDesc": "최고 성능 모델",
+    "claudeOnly": "Claude 엔진에서만 지원됩니다",
+    "modelNote": "/model 명령어로 실행 중인 세션에 즉시 적용됩니다"
   },
   "sessionDetails": {
     "title": "세션 상세 정보",

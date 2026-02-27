@@ -13,7 +13,7 @@
   "landing": {
     "heroBadge": "A New Way to Control CLI",
     "heroTitle": "Your Powerful Portable AI Agent",
-    "heroSubtitle": "Control your PC's terminal environment perfectly synchronized from any web browser. Call powerful models remotely from anywhere.",
+    "heroSubtitle": "Control your PC's terminal environment perfectly synchronized <br className=\"hidden sm:block\" />from any web browser. Call powerful models remotely from anywhere.",
     "ctaStart": "Start with GitHub",
     "ctaDashboard": "Go to Dashboard",
     "featureE2E": "Strong End-to-End Encryption",
@@ -23,7 +23,7 @@
     "featureAnywhere": "Accessible Anywhere (PWA)",
     "featureAnywhereDesc": "Install as a native app on smartphones, tablets, or any browser, and jump right into your workspace.",
     "mockupHeader": "pocket-ai@macbook:~",
-    "mockupLine1": "$ pocket-ai start --engine claude-3-5-sonnet",
+    "mockupLine1": "$ pocket-ai",
     "mockupLine2": "Pocket AI Daemon Started.",
     "mockupLine3": "Listening securely for Web CLI connections...",
     "footer": "Pocket AI - Your Portable CLI Agent."
@@ -146,6 +146,29 @@
     "permissionApproved": "Allowed",
     "permissionDenied": "Denied",
     "selectionRequest": "Selection Request"
+  },
+  "chatSettings": {
+    "title": "Session Settings",
+    "permissionMode": "PERMISSION MODE",
+    "permDefault": "Default",
+    "permDefaultDesc": "Ask for permission on each tool use",
+    "permAcceptEdits": "Accept Edits",
+    "permAcceptEditsDesc": "Auto-allow file edit and create operations",
+    "permPlanMode": "Plan Mode",
+    "permPlanModeDesc": "Auto-deny all execution actions (read-only)",
+    "permYolo": "Yolo",
+    "permYoloDesc": "Auto-allow all tool uses (use with caution)",
+    "model": "MODEL",
+    "modelDefault": "Default",
+    "modelDefaultDesc": "Use CLI settings",
+    "modelAdaptive": "Adaptive Usage",
+    "modelAdaptiveDesc": "Balanced model routing",
+    "modelSonnet": "Sonnet",
+    "modelSonnetDesc": "Fast and capable",
+    "modelOpus": "Opus",
+    "modelOpusDesc": "Most capable",
+    "claudeOnly": "Only supported with Claude engine",
+    "modelNote": "Applied immediately to the running session via /model command"
   },
   "sessionDetails": {
     "title": "Session Details",
