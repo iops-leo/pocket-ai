@@ -80,32 +80,39 @@ const server = new Server({
 });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-        tools: [
-            {
-                name: "ask_gemini",
-                description: "Ask Google's Gemini model a question or give it a task. Useful for broad knowledge, reasoning, and long-context analysis.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        prompt: { type: "string", description: "The prompt or task for Gemini" }
-                    },
-                    required: ["prompt"]
-                }
-            },
-            {
-                name: "ask_codex",
-                description: "Ask Codex (Aider) a coding question or instruct it to modify files. Highly specialized in code editing and repository context.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        prompt: { type: "string", description: "The coding prompt or instruction for Codex" }
-                    },
-                    required: ["prompt"]
-                }
+    const tools: any[] = [];
+
+    // UI에서 사용자가 제미나이 구독/연동을 활성화한 경우에만 노출 (기본값: 허용)
+    if (process.env.POCKET_AI_ENABLE_GEMINI !== 'false') {
+        tools.push({
+            name: "ask_gemini",
+            description: "Ask Google's Gemini model a question or give it a task. Useful for broad knowledge, reasoning, long-context analysis, and highly specialized in generating UI designs, front-end components (React/Web), and creative visual tasks.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    prompt: { type: "string", description: "The prompt or task for Gemini" }
+                },
+                required: ["prompt"]
             }
-        ]
-    };
+        });
+    }
+
+    // UI에서 사용자가 코덱스 구독/연동을 활성화한 경우에만 노출 (기본값: 허용)
+    if (process.env.POCKET_AI_ENABLE_CODEX !== 'false') {
+        tools.push({
+            name: "ask_codex",
+            description: "Ask Codex (Aider) a coding question or instruct it to modify files. Highly specialized in code editing and repository context.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    prompt: { type: "string", description: "The coding prompt or instruction for Codex" }
+                },
+                required: ["prompt"]
+            }
+        });
+    }
+
+    return { tools };
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -113,6 +120,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     if (name === "ask_gemini" || name === "ask_codex") {
         const engine = name === "ask_gemini" ? "gemini" : "codex";
+
+        // 구독/연동 비활성화 체크
+        if (engine === 'gemini' && process.env.POCKET_AI_ENABLE_GEMINI === 'false') {
+            return {
+                content: [{ type: "text", text: "Error: Gemini orchestration is disabled. Please subscribe or enable it in your Pocket AI settings." }],
+                isError: true
+            };
+        }
+        if (engine === 'codex' && process.env.POCKET_AI_ENABLE_CODEX === 'false') {
+            return {
+                content: [{ type: "text", text: "Error: Codex orchestration is disabled. Please subscribe or enable it in your Pocket AI settings." }],
+                isError: true
+            };
+        }
+
         const prompt = typeof args?.prompt === 'string' ? args.prompt : '';
 
         if (!prompt) {
