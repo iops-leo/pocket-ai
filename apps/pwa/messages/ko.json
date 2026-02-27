@@ -10,6 +10,24 @@
     "copied": "복사됨!",
     "copy": "복사"
   },
+  "landing": {
+    "heroBadge": "새로운 방식의 CLI 제어",
+    "heroTitle": "내 손안의 강력한 AI 에이전트",
+    "heroSubtitle": "어디서든 웹 브라우저만 있으면 내 PC의 터미널 환경과 완벽하게 연동되는 AI 비서를 제어하세요. 강력한 모델들을 원격으로 호출하세요.",
+    "ctaStart": "GitHub로 시작하기",
+    "ctaDashboard": "대시보드로 이동",
+    "featureE2E": "강력한 종단간 암호화",
+    "featureE2EDesc": "모든 통신은 AES-256-GCM 알고리즘으로 강력하게 종단간 암호화되어 안전합니다.",
+    "featureRealtime": "실시간 터미널 렌더링",
+    "featureRealtimeDesc": "웹 소켓 기반의 빠른 통신으로 집이나 사무실에 있는 PC의 터미널 반응을 지연 없이 실시간으로 렌더링합니다.",
+    "featureAnywhere": "어디서나 접근 가능한 PWA",
+    "featureAnywhereDesc": "스마트폰, 태블릿, 다른 PC 어느 브라우저에서든 앱처럼 설치하고 즉시 내 작업 환경에 접근하세요.",
+    "mockupHeader": "pocket-ai@macbook:~",
+    "mockupLine1": "$ pocket-ai start --engine claude-3-5-sonnet",
+    "mockupLine2": "Pocket AI Daemon Started.",
+    "mockupLine3": "Listening securely for Web CLI connections...",
+    "footer": "Pocket AI - Your Portable CLI Agent."
+  },
   "login": {
     "title": "Pocket AI",
     "subtitle": "어디서든 내 PC의 AI 에이전트를 원격 제어하세요",

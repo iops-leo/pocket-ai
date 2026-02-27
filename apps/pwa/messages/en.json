@@ -10,6 +10,24 @@
     "copied": "Copied!",
     "copy": "Copy"
   },
+  "landing": {
+    "heroBadge": "A New Way to Control CLI",
+    "heroTitle": "Your Powerful Portable AI Agent",
+    "heroSubtitle": "Control your PC's terminal environment perfectly synchronized from any web browser. Call powerful models remotely from anywhere.",
+    "ctaStart": "Start with GitHub",
+    "ctaDashboard": "Go to Dashboard",
+    "featureE2E": "Strong End-to-End Encryption",
+    "featureE2EDesc": "All communications are highly secured and E2E encrypted using AES-256-GCM architecture.",
+    "featureRealtime": "Real-time Terminal Rendering",
+    "featureRealtimeDesc": "Experience zero-latency real-time rendering of your home or office PC terminal via WebSockets.",
+    "featureAnywhere": "Accessible Anywhere (PWA)",
+    "featureAnywhereDesc": "Install as a native app on smartphones, tablets, or any browser, and jump right into your workspace.",
+    "mockupHeader": "pocket-ai@macbook:~",
+    "mockupLine1": "$ pocket-ai start --engine claude-3-5-sonnet",
+    "mockupLine2": "Pocket AI Daemon Started.",
+    "mockupLine3": "Listening securely for Web CLI connections...",
+    "footer": "Pocket AI - Your Portable CLI Agent."
+  },
   "login": {
     "title": "Pocket AI",
     "subtitle": "Control your PC's AI agent from anywhere",
