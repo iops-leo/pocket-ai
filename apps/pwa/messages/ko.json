@@ -13,7 +13,7 @@
   "landing": {
     "heroBadge": "새로운 방식의 CLI 제어",
     "heroTitle": "내 손안의 강력한 AI 에이전트",
-    "heroSubtitle": "어디서든 웹 브라우저만 있으면 내 PC의 터미널 환경과 <br className=\"hidden sm:block\" />완벽하게 연동되는 AI 비서를 제어하세요.<br className=\"hidden sm:block\" /> 강력한 모델들을 원격으로 호출하세요.",
+    "heroSubtitle": "어디서든 웹 브라우저만 있으면 내 PC의 터미널 환경과 <br>완벽하게 연동되는 AI 비서를 제어하세요.<br> 강력한 모델들을 원격으로 호출하세요.",
     "ctaStart": "무료로 시작하기",
     "ctaDashboard": "대시보드로 이동",
     "featureE2E": "강력한 종단간 암호화",

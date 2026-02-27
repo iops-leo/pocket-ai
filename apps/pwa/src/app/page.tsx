@@ -79,10 +79,11 @@ export default function LandingPage() {
           ))}
         </h1>
 
-        <p
-          className="text-lg md:text-xl text-gray-400 max-w-2xl mb-12 leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: t('heroSubtitle') }}
-        />
+        <p className="text-lg md:text-xl text-gray-400 max-w-2xl mb-12 leading-relaxed">
+          {t.rich('heroSubtitle', {
+            br: () => <br className="hidden sm:block" />
+          })}
+        </p>
 
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
           <button
