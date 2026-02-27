@@ -47,7 +47,9 @@ sequenceDiagram
 - `@modelcontextprotocol/sdk`를 사용하여 Stdio 방식으로 통신하는 MCP 서버입니다.
 - **제공 도구 (Tools)**:
   - `ask_gemini`: 사용자의 프롬프트를 받아 `gemini` CLI를 백그라운드로 스폰(spawn)하여 실행합니다. 긴 컨텍스트 분석 및 일반적인 추론뿐만 아니라 **UI 디자인, 프론트엔드 컴포넌트(React/Web) 생성, 시각적 창의성(UX)** 작업에 고도로 특화되어 있습니다.
+    - **설정된 설명 (Description)**: `"Ask Google's Gemini model a question or give it a task. Useful for broad knowledge, reasoning, long-context analysis, and highly specialized in generating UI designs, front-end components (React/Web), and creative visual tasks."`
   - `ask_codex`: `codex` (Aider) CLI를 스폰하여 실행합니다. 코드 베이스를 직접 수정하거나 파일 상태를 점검하는 데 특화되어 터미널 백엔드 및 레포지토리 컨텍스트 관리에 최적화되어 있습니다.
+    - **설정된 설명 (Description)**: `"Ask Codex (Aider) a coding question or instruct it to modify files. Highly specialized in code editing and repository context."`
   
 > **💡 설정 및 접근 제어 (Subscriptions)**: 
 > Pocket AI는 환경 변수(`POCKET_AI_ENABLE_GEMINI`, `POCKET_AI_ENABLE_CODEX`)를 통해 사용자가 실제로 구독/설치한 도구만 Claude에게 노출시킵니다.
