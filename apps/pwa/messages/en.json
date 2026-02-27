@@ -92,7 +92,10 @@
     "logout": "Log Out",
     "language": "Language",
     "korean": "한국어",
-    "english": "English"
+    "english": "English",
+    "about": "About",
+    "version": "Version",
+    "pwaUrl": "Web URL"
   },
   "chat": {
     "slashCommandsTitle": "Slash Commands",

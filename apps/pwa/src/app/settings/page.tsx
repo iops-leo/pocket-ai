@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Copy, LogOut, Loader2, Check, ArrowLeft, Globe, Github, Key, Eye, EyeOff } from 'lucide-react';
+import { Copy, LogOut, Loader2, Check, ArrowLeft, Globe, Github, Key, Eye, EyeOff, Info } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useTranslations } from 'next-intl';
@@ -197,6 +197,31 @@ export default function SettingsPage() {
                         <LogOut size={16} />
                         {t('logout')}
                     </button>
+                </section>
+
+                {/* 앱 정보 */}
+                <section className="p-6 border border-gray-800 rounded-2xl bg-gray-900 shadow-sm">
+                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <Info size={20} className="text-gray-400" />
+                        {t('about')}
+                    </h2>
+                    <div className="space-y-3 text-sm">
+                        <div className="flex items-center justify-between">
+                            <span className="text-gray-500">{t('version')}</span>
+                            <span className="text-gray-300 font-mono">v0.1.0</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <span className="text-gray-500">{t('pwaUrl')}</span>
+                            <a
+                                href="https://pocket-ai-pwa.vercel.app"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-400 hover:text-blue-300 font-mono text-xs transition-colors"
+                            >
+                                pocket-ai-pwa.vercel.app
+                            </a>
+                        </div>
+                    </div>
                 </section>
             </main>
         </div>

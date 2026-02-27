@@ -92,7 +92,10 @@
     "logout": "로그아웃",
     "language": "언어",
     "korean": "한국어",
-    "english": "English"
+    "english": "English",
+    "about": "앱 정보",
+    "version": "버전",
+    "pwaUrl": "웹 주소"
   },
   "chat": {
     "slashCommandsTitle": "슬래시 명령어",

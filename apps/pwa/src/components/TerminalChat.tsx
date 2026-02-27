@@ -249,8 +249,13 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     const decryptedJson = await decrypt(payload.body, decryptKey);
                     const msg = JSON.parse(decryptedJson);
 
+                    if (msg.t === 'session-event') {
+                        if (msg.event === 'stopped-typing') {
+                            setIsAiThinking(false);
+                        }
+                    }
+
                     if (msg.t === 'text') {
-                        setIsAiThinking(false);
                         setMessages(prev => [...prev, {
                             kind: 'text',
                             id: crypto.randomUUID(),
@@ -261,7 +266,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     }
 
                     if (msg.t === 'tool-call') {
-                        setIsAiThinking(false);
                         setMessages(prev => [...prev, {
                             kind: 'tool',
                             id: msg.id,
@@ -272,7 +276,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     }
 
                     if (msg.t === 'tool-result') {
-                        setIsAiThinking(false);
                         setMessages(prev => prev.map(m =>
                             m.kind === 'tool' && m.id === msg.id
                                 ? { ...m, output: msg.result, status: (msg.error ? 'error' : 'done') as 'error' | 'done', error: msg.error }
