@@ -1,4 +1,4 @@
-export type SessionMessageType = 'text' | 'tool-call' | 'tool-result' | 'session-event';
+export type SessionMessageType = 'text' | 'tool-call' | 'tool-result' | 'session-event' | 'input-request' | 'input-response';
 
 export interface SessionMessageText {
     t: 'text';
@@ -24,11 +24,33 @@ export interface SessionEventMessage {
     event: 'typing' | 'stopped-typing' | 'processing';
 }
 
+/** Claude가 도구 사용 권한 또는 선택지를 요청할 때 PWA로 전송 */
+export interface SessionMessageInputRequest {
+    t: 'input-request';
+    requestId: string;
+    requestType: 'permission' | 'selection';
+    toolName?: string;
+    toolInput?: string;
+    message?: string;
+    options?: string[];
+}
+
+/** PWA에서 권한 응답 또는 선택지 응답을 CLI로 전송 */
+export interface SessionMessageInputResponse {
+    t: 'input-response';
+    requestId: string;
+    approved: boolean;
+    selectedOption?: string;
+    message?: string;
+}
+
 export type SessionPayload =
     | SessionMessageText
     | SessionMessageToolCall
     | SessionMessageToolResult
-    | SessionEventMessage;
+    | SessionEventMessage
+    | SessionMessageInputRequest
+    | SessionMessageInputResponse;
 
 /**
  * Standard REST API response format.

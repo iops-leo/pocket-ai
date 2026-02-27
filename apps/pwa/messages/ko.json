@@ -113,7 +113,13 @@
     "copyMessage": "복사",
     "toolRunning": "실행 중...",
     "toolCompleted": "완료",
-    "toolError": "오류"
+    "toolError": "오류",
+    "permissionRequest": "도구 사용 권한 요청",
+    "permissionApprove": "허용",
+    "permissionDeny": "거부",
+    "permissionApproved": "허용됨",
+    "permissionDenied": "거부됨",
+    "selectionRequest": "선택 요청"
   },
   "sessionDetails": {
     "title": "세션 상세 정보",

@@ -113,7 +113,13 @@
     "copyMessage": "Copy",
     "toolRunning": "Running...",
     "toolCompleted": "Done",
-    "toolError": "Error"
+    "toolError": "Error",
+    "permissionRequest": "Tool Permission Request",
+    "permissionApprove": "Allow",
+    "permissionDeny": "Deny",
+    "permissionApproved": "Allowed",
+    "permissionDenied": "Denied",
+    "selectionRequest": "Selection Request"
   },
   "sessionDetails": {
     "title": "Session Details",

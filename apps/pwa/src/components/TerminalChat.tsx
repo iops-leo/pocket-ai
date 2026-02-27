@@ -279,6 +279,21 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                                 : m
                         ));
                     }
+
+                    // Claude JSON 스트리밍: 권한 프롬프트 / 선택지 요청
+                    if (msg.t === 'input-request') {
+                        setIsAiThinking(false);
+                        setMessages(prev => [...prev, {
+                            kind: 'permission' as const,
+                            id: msg.requestId,
+                            requestType: msg.requestType as 'permission' | 'selection',
+                            toolName: msg.toolName,
+                            toolInput: msg.toolInput,
+                            message: msg.message,
+                            options: msg.options,
+                            status: 'pending' as const,
+                        }]);
+                    }
                 } catch (e) {
                     console.error('Failed to decrypt CLI message', e);
                 }
@@ -356,6 +371,30 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         }
     };
 
+
+    // 권한 프롬프트 응답 (허용/거부) 전송
+    const handlePermissionResponse = useCallback(async (requestId: string, approved: boolean) => {
+        const encryptKey = sessionKeyRef.current || sharedSecretRef.current;
+        if (!socketRef.current || !encryptKey || isDisconnected) return;
+
+        // 메시지 목록에서 해당 권한 요청 상태 업데이트
+        setMessages(prev => prev.map(m =>
+            m.kind === 'permission' && m.id === requestId
+                ? { ...m, status: (approved ? 'approved' : 'denied') as 'approved' | 'denied' }
+                : m
+        ));
+
+        try {
+            const response = { t: 'input-response', requestId, approved };
+            const encryptedBody = await encrypt(JSON.stringify(response), encryptKey);
+            socketRef.current.emit('update', {
+                sessionId, sender: 'pwa', body: encryptedBody
+            });
+            if (approved) setIsAiThinking(true);
+        } catch (err) {
+            console.error('Failed to send permission response', err);
+        }
+    }, [isDisconnected, sessionId]);
 
     // 옵션 선택 시 해당 텍스트를 메시지로 전송
     const handleOptionSelect = useCallback(async (option: string) => {
@@ -536,7 +575,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     </div>
                 )}
 
-                <MessageList messages={messages} isAiThinking={isAiThinking} onOptionSelect={handleOptionSelect} />
+                <MessageList messages={messages} isAiThinking={isAiThinking} onOptionSelect={handleOptionSelect} onPermissionResponse={handlePermissionResponse} />
 
                 {/* 입력 영역 */}
                 <div className="flex-none bg-gray-950 w-full border-t border-gray-800/60 relative">

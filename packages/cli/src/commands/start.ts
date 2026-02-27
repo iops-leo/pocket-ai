@@ -10,6 +10,8 @@ import type { Socket } from 'socket.io-client';
 import { SessionWatcher, getSessionDisplayName, isValidEngine } from '../session-manager.js';
 import { createSessionTranscriptWatcher } from '../utils/session-watcher.js';
 import { collectSlashCommands } from '../utils/slash-commands.js';
+import { ClaudeStreamBridge } from '../utils/claude-stream.js';
+import { PtyPromptDetector } from '../utils/pty-prompt-detector.js';
 
 interface StartOptions {
   remote?: boolean;
@@ -203,160 +205,70 @@ export async function startSession(command: string = 'claude', options: StartOpt
     console.log(`[Pocket AI] 지정된 세션에 연결합니다: ${sessionId.slice(0, 8)}...`);
   }
 
-  // 3. Dynamically import node-pty (native module)
-  let pty: any;
-  try {
-    pty = await import('node-pty');
-  } catch {
-    console.error('node-pty를 로드할 수 없습니다. npm install 후 다시 시도하세요.');
-    process.exit(1);
-  }
+  // ─── Claude: JSON 스트리밍 모드 (Happy 방식) ───
+  // Claude는 --output-format stream-json --input-format stream-json --permission-prompt-tool stdio 로
+  // 구조화된 JSON 양방향 통신을 사용. 권한 프롬프트/선택지를 PWA에서 처리 가능.
+  //
+  // Codex/Gemini: 기존 PTY + JSONL/텍스트 릴레이 방식 유지.
 
-  // 4. Spawn AI CLI process
-  const shell = pty.default.spawn(command, [], {
-    name: 'xterm-256color',
-    cols: process.stdout.columns || 80,
-    rows: process.stdout.rows || 24,
-    cwd,
-    env: { ...process.env },
-  });
-
-  // 5. Local mode: pipe CLI output to terminal
+  const useClaude = engine === 'claude';
   let socket: Socket | null = null;
   let sharedSecret: CryptoKey | null = null;
 
-  // JSONL session watcher — reads Claude Code's native transcript file
-  // instead of parsing fragile PTY/ANSI output
-  const sessionWatcher = createSessionTranscriptWatcher(engine, cwd, (events) => {
-    if (sessionKey && socket) {
-      for (const event of events) {
-        encrypt(JSON.stringify(event), sessionKey)
-          .then((encrypted) => {
-            socket!.emit('update', {
-              sessionId,
-              sender: 'cli',
-              body: encrypted,
-            });
-          })
-          .catch(() => { });
-      }
-    }
-  });
-  sessionWatcher?.start();
-  const shouldRelayPtyText = !sessionWatcher;
-
-  shell.onData((data: string) => {
-    if (!headless) {
-      process.stdout.write(data); // 로컬 터미널은 raw ANSI 그대로 (변경 없음)
-    }
-
-    // Claude 외 엔진(codex/gemini)은 PTY 출력을 그대로 원격으로 중계
-    if (shouldRelayPtyText && socket && sessionKey) {
-      const plainText = stripAnsi(data).replace(/\r/g, '');
-      if (!plainText.trim()) return;
-
-      encrypt(JSON.stringify({ t: 'text', text: plainText }), sessionKey)
-        .then((encrypted) => {
-          socket!.emit('update', {
-            sessionId,
-            sender: 'cli',
-            body: encrypted,
-          });
-        })
-        .catch(() => { });
-    }
-  });
-
-  if (!headless) {
-    // Handle local keyboard input
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
-    }
-    process.stdin.resume();
-    process.stdin.on('data', (data: Buffer) => {
-      shell.write(data.toString());
-    });
-
-    // Handle terminal resize
-    process.stdout.on('resize', () => {
-      shell.resize(process.stdout.columns || 80, process.stdout.rows || 24);
-    });
+  // 이벤트를 서버로 중계하는 공통 헬퍼
+  function relayEvent(event: import('@pocket-ai/wire').SessionPayload): void {
+    if (!sessionKey || !socket) return;
+    encrypt(JSON.stringify(event), sessionKey)
+      .then((encrypted) => {
+        socket!.emit('update', { sessionId, sender: 'cli', body: encrypted });
+      })
+      .catch(() => { });
   }
 
-  // Handle CLI process exit
-  shell.onExit(({ exitCode }: { exitCode: number }) => {
-    console.log(`\nAI CLI 프로세스가 종료되었습니다 (code: ${exitCode})`);
-    sessionWatcher?.destroy();
-    if (socket) socket.disconnect();
-    process.exit(exitCode);
-  });
-
-  // 6. Connect to relay server
-  if (options.remote !== false) {
-    const sessionMetadata = { hostname: os.hostname(), engine, cwd };
-    socket = connectToServer({
+  // ─── 공통 서버 연결 옵션 (엔진 불문) ───
+  function buildServerOptions(onPwaMessage: (msg: Record<string, unknown>) => void) {
+    return {
       sessionId,
       publicKey: publicKeyBase64,
-      metadata: sessionMetadata,
-      onSessionIdUpdate: async (newSessionId) => {
+      metadata: { hostname: os.hostname(), engine, cwd } as Record<string, string>,
+      onSessionIdUpdate: async (newSessionId: string) => {
         sessionId = newSessionId;
-        // 새 세션 ID로 키 저장 갱신
         await persistSessionKeys(newSessionId);
         console.log(`[Pocket AI] 세션 재등록 완료: ${newSessionId.slice(0, 8)}...`);
       },
-      onAuthSuccess: (data) => {
+      onAuthSuccess: (data: { sessionId: string }) => {
         console.log(`서버 연결 완료 (세션: ${data.sessionId.slice(0, 8)}...)`);
         console.log('원격 접속 대기 중... (PWA 또는 다른 머신에서 접속 가능)\n');
       },
-      onAuthError: (data) => {
+      onAuthError: (data: { error: string }) => {
         console.error(`서버 인증 실패: ${data.error}`);
       },
-      onKeyExchange: async (data) => {
+      onKeyExchange: async (data: { publicKey: string }) => {
         try {
-          // PWA sent its public key - derive shared secret (used only for session key transport)
           const peerPublicKey = await importPublicKey(data.publicKey);
           sharedSecret = await deriveSharedSecret(keyPair.privateKey, peerPublicKey);
-
-          // Session key를 ECDH shared secret으로 wrap하여 PWA에 전송
           const wrappedKey = await wrapSessionKey(sessionKey, sharedSecret);
-          socket!.emit('session-key', {
-            sessionId,
-            wrappedKey,
-          });
+          socket!.emit('session-key', { sessionId, wrappedKey });
           console.log('[Pocket AI] Session key 전송 완료');
 
-          // PWA가 룸에 참여한 후이므로 슬래시 명령어 전송
           try {
             const commands = collectSlashCommands(engine, cwd);
             if (commands.length > 0) {
               socket!.emit('slash-commands', { sessionId, commands });
               console.log(`[Pocket AI] 슬래시 명령어 ${commands.length}개 전송 완료`);
             }
-          } catch {
-            // 스캔 실패는 비치명적
-          }
+          } catch { /* 비치명적 */ }
         } catch (err) {
           console.error('[Pocket AI] 키교환 실패:', err);
         }
       },
-      onUpdate: async (data) => {
+      onUpdate: async (data: { sender: string; body?: import('@pocket-ai/wire').EncryptedBody }) => {
         if (data.sender === 'pwa' && data.body && sessionKey) {
           try {
             const decrypted = await decrypt(data.body, sessionKey);
             const msg = JSON.parse(decrypted);
-            if (msg.t === 'text') {
-              const text = msg.text as string;
-              // 일부 CLI TUI(claude/codex/gemini)는 "text\r"를 한 번에 받으면 Enter submit 대신 줄바꿈으로 처리될 수 있음
-              // 실제 키보드처럼 "텍스트"와 "Enter"를 분리해서 전달
-              if (text.endsWith('\r') || text.endsWith('\n')) {
-                const content = text.slice(0, -1);
-                if (content) shell.write(content);
-                setTimeout(() => shell.write('\r'), 100);
-              } else {
-                shell.write(text);
-              }
-            }
-          } catch (err) {
+            onPwaMessage(msg);
+          } catch {
             console.error('[Pocket AI] 메시지 복호화 실패');
           }
         }
@@ -364,81 +276,238 @@ export async function startSession(command: string = 'claude', options: StartOpt
       onDisconnect: () => {
         console.log('[Pocket AI] 서버 연결이 끊어졌습니다. 재연결 중...');
       },
+    };
+  }
+
+  if (useClaude) {
+    // ════════════════════════════════════════════════════
+    // Claude 전용: JSON 스트리밍 브릿지
+    // ════════════════════════════════════════════════════
+
+    const bridge = new ClaudeStreamBridge({
+      cwd,
+      headless,
+      onMessage: (event) => relayEvent(event),
+      onPermissionRequest: (request) => relayEvent(request),
+      onReady: () => {
+        // Claude가 입력 대기 상태임을 PWA에 알림 (선택적)
+        relayEvent({ t: 'session-event', event: 'stopped-typing' });
+      },
+      onSessionId: (claudeSessionId) => {
+        console.log(`[ClaudeStream] Claude 세션 ID: ${claudeSessionId.slice(0, 8)}...`);
+      },
+      onExit: (code) => {
+        console.log(`\nClaude 프로세스가 종료되었습니다 (code: ${code})`);
+        if (socket) socket.disconnect();
+        process.exit(code);
+      },
     });
 
-    socket.on('session-spawn-request', (payload: any) => {
-      if (!payload || typeof payload.sessionId !== 'string') return;
+    bridge.start();
 
-      const requestedEngine = typeof payload?.metadata?.engine === 'string'
-        ? payload.metadata.engine.trim().toLowerCase()
-        : '';
-      const requestedCwd = typeof payload?.metadata?.cwd === 'string'
-        ? payload.metadata.cwd.trim()
-        : '';
-
-      if (!requestedEngine || !isValidEngine(requestedEngine) || !requestedCwd) {
-        console.error('[Pocket AI] 세션 시작 요청 무시: engine/cwd 정보가 유효하지 않습니다.');
-        return;
-      }
-
-      console.log(
-        `[Pocket AI] 원격 세션 생성 요청 수신: ${payload.sessionId.slice(0, 8)}... (${requestedEngine}, ${requestedCwd})`
-      );
-      spawnSessionFromRequest({
-        sessionId: payload.sessionId,
-        engine: requestedEngine,
-        cwd: requestedCwd,
+    // 로컬 stdin → Claude (headless가 아닌 경우)
+    if (!headless) {
+      process.stdin.resume();
+      const rl = await import('readline');
+      const stdinRl = rl.createInterface({ input: process.stdin, output: process.stdout });
+      stdinRl.on('line', (line: string) => {
+        bridge.sendMessage(line);
       });
-    });
-  }
+    }
 
-  let watcher: SessionWatcher | null = null;
-  if (!headless) {
-    // 7. Happy 스타일 폴더 변경 감지 (선택적 기능)
-    watcher = new SessionWatcher(engine);
-    watcher.onCwdChange((oldKey, newKey) => {
-      console.log(`\n[Pocket AI] 폴더 변경 감지: ${getSessionDisplayName(oldKey)} → ${getSessionDisplayName(newKey)}`);
-      console.log('현재 세션을 계속 사용합니다. 새 세션을 시작하려면 Ctrl+C 후 pocket-ai를 다시 실행하세요.\n');
-      // TODO: 데몬 모드에서는 자동으로 새 세션 시작
-    });
-    watcher.start();
-
-    // 8. CLI 내부 명령어 처리 (Happy 스타일 /switch)
-    process.stdin.removeAllListeners('data');
-
-    process.stdin.on('data', (data: Buffer) => {
-      const input = data.toString();
-
-      // /switch 명령어 감지
-      if (input.startsWith('/switch ')) {
-        const newEngine = input.slice(8).trim();
-        if (isValidEngine(newEngine)) {
-          console.log(`\n[Pocket AI] AI 엔진을 ${newEngine}으로 전환합니다...`);
-          // TODO: 현재 세션 종료 후 새 엔진으로 재시작
-          console.log('(구현 예정: 현재는 수동으로 Ctrl+C 후 pocket-ai start ' + newEngine + ' 실행)\n');
-        } else {
-          console.log(`\n[Pocket AI] 지원하지 않는 엔진입니다: ${newEngine}`);
-          console.log('지원 엔진: claude, codex, gemini\n');
+    // 서버 연결
+    if (options.remote !== false) {
+      socket = connectToServer(buildServerOptions((msg) => {
+        // PWA → Claude: 텍스트 메시지
+        if (msg.t === 'text') {
+          const text = (msg.text as string).replace(/[\r\n]+$/, '');
+          if (text) bridge.sendMessage(text);
         }
-        return;
+        // PWA → Claude: 권한 응답
+        if (msg.t === 'input-response') {
+          bridge.respondToPermission(
+            msg.requestId as string,
+            msg.approved as boolean,
+            msg.message as string | undefined,
+          );
+        }
+      }));
+
+      socket.on('session-spawn-request', (payload: any) => {
+        if (!payload || typeof payload.sessionId !== 'string') return;
+        const requestedEngine = typeof payload?.metadata?.engine === 'string'
+          ? payload.metadata.engine.trim().toLowerCase() : '';
+        const requestedCwd = typeof payload?.metadata?.cwd === 'string'
+          ? payload.metadata.cwd.trim() : '';
+        if (!requestedEngine || !isValidEngine(requestedEngine) || !requestedCwd) return;
+        console.log(`[Pocket AI] 원격 세션 생성 요청: ${payload.sessionId.slice(0, 8)}... (${requestedEngine})`);
+        spawnSessionFromRequest({ sessionId: payload.sessionId, engine: requestedEngine, cwd: requestedCwd });
+      });
+    }
+
+    // Graceful shutdown
+    const cleanup = () => {
+      bridge.kill();
+      if (socket) socket.disconnect();
+      process.exit(0);
+    };
+    process.on('SIGINT', cleanup);
+    process.on('SIGTERM', cleanup);
+
+  } else {
+    // ════════════════════════════════════════════════════
+    // Codex / Gemini: 기존 PTY + JSONL/텍스트 릴레이
+    // ════════════════════════════════════════════════════
+
+    // Dynamically import node-pty (native module)
+    let pty: any;
+    try {
+      pty = await import('node-pty');
+    } catch {
+      console.error('node-pty를 로드할 수 없습니다. npm install 후 다시 시도하세요.');
+      process.exit(1);
+    }
+
+    const shell = pty.default.spawn(command, [], {
+      name: 'xterm-256color',
+      cols: process.stdout.columns || 80,
+      rows: process.stdout.rows || 24,
+      cwd,
+      env: { ...process.env },
+    });
+
+    // JSONL session watcher (Codex만 해당, Gemini는 PTY 텍스�� 릴레이)
+    const sessionWatcher = createSessionTranscriptWatcher(engine, cwd, (events) => {
+      for (const event of events) relayEvent(event);
+    });
+    sessionWatcher?.start();
+    const shouldRelayPtyText = !sessionWatcher;
+
+    // PTY 권한 프롬프트 감지 (Codex/Gemini)
+    const isDetectableEngine = engine === 'codex' || engine === 'gemini';
+    const promptDetector = isDetectableEngine
+      ? new PtyPromptDetector(engine as 'codex' | 'gemini', (request) => {
+        relayEvent(request);
+        if (!headless) {
+          console.log(`\n[Pocket AI] 권한 요청 감지: ${request.message || request.toolName}`);
+          console.log('[Pocket AI] PWA에서 응답 대기 중...');
+        }
+      })
+      : null;
+
+    shell.onData((data: string) => {
+      if (!headless) {
+        process.stdout.write(data);
       }
 
-      // 일반 입력은 AI CLI로 전달
-      shell.write(input);
+      promptDetector?.feed(data);
+
+      if (shouldRelayPtyText && socket && sessionKey) {
+        const plainText = stripAnsi(data).replace(/\r/g, '');
+        if (!plainText.trim()) return;
+        relayEvent({ t: 'text', text: plainText });
+      }
     });
+
+    if (!headless) {
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(true);
+      }
+      process.stdin.resume();
+      process.stdin.on('data', (data: Buffer) => {
+        shell.write(data.toString());
+      });
+
+      process.stdout.on('resize', () => {
+        shell.resize(process.stdout.columns || 80, process.stdout.rows || 24);
+      });
+    }
+
+    shell.onExit(({ exitCode }: { exitCode: number }) => {
+      console.log(`\nAI CLI 프로세스가 종료되었습니다 (code: ${exitCode})`);
+      sessionWatcher?.destroy();
+      if (socket) socket.disconnect();
+      process.exit(exitCode);
+    });
+
+    // 서버 연결
+    if (options.remote !== false) {
+      socket = connectToServer(buildServerOptions((msg) => {
+        if (msg.t === 'text') {
+          const text = msg.text as string;
+          if (text.endsWith('\r') || text.endsWith('\n')) {
+            const content = text.slice(0, -1);
+            if (content) shell.write(content);
+            setTimeout(() => shell.write('\r'), 100);
+          } else {
+            shell.write(text);
+          }
+        }
+        // PWA → Codex/Gemini: 권한 응답
+        if (msg.t === 'input-response' && promptDetector) {
+          const key = promptDetector.respond(
+            msg.requestId as string,
+            msg.approved as boolean,
+          );
+          if (key) {
+            shell.write(key);
+            if (!headless) {
+              console.log(`[Pocket AI] 권한 ${msg.approved ? '허용' : '거부'} → PTY 전송`);
+            }
+          }
+        }
+      }));
+
+      socket.on('session-spawn-request', (payload: any) => {
+        if (!payload || typeof payload.sessionId !== 'string') return;
+        const requestedEngine = typeof payload?.metadata?.engine === 'string'
+          ? payload.metadata.engine.trim().toLowerCase() : '';
+        const requestedCwd = typeof payload?.metadata?.cwd === 'string'
+          ? payload.metadata.cwd.trim() : '';
+        if (!requestedEngine || !isValidEngine(requestedEngine) || !requestedCwd) return;
+        console.log(`[Pocket AI] 원격 세션 생성 요청: ${payload.sessionId.slice(0, 8)}... (${requestedEngine})`);
+        spawnSessionFromRequest({ sessionId: payload.sessionId, engine: requestedEngine, cwd: requestedCwd });
+      });
+    }
+
+    let watcher: SessionWatcher | null = null;
+    if (!headless) {
+      watcher = new SessionWatcher(engine);
+      watcher.onCwdChange((oldKey, newKey) => {
+        console.log(`\n[Pocket AI] 폴더 변경 감지: ${getSessionDisplayName(oldKey)} → ${getSessionDisplayName(newKey)}`);
+        console.log('현재 세션을 계속 사용합니다. 새 세션을 시작하려면 Ctrl+C 후 pocket-ai를 다시 실행하세요.\n');
+      });
+      watcher.start();
+
+      process.stdin.removeAllListeners('data');
+      process.stdin.on('data', (data: Buffer) => {
+        const input = data.toString();
+        if (input.startsWith('/switch ')) {
+          const newEngine = input.slice(8).trim();
+          if (isValidEngine(newEngine)) {
+            console.log(`\n[Pocket AI] AI 엔진을 ${newEngine}으로 전환합니다...`);
+            console.log('(구현 예정: 현재는 수동으로 Ctrl+C 후 pocket-ai start ' + newEngine + ' 실행)\n');
+          } else {
+            console.log(`\n[Pocket AI] 지원하지 않는 엔진입니다: ${newEngine}`);
+            console.log('지원 엔진: claude, codex, gemini\n');
+          }
+          return;
+        }
+        shell.write(input);
+      });
+    }
+
+    // Graceful shutdown
+    const cleanup = () => {
+      watcher?.stop();
+      sessionWatcher?.destroy();
+      shell.kill();
+      if (socket) socket.disconnect();
+      process.exit(0);
+    };
+    process.on('SIGINT', cleanup);
+    process.on('SIGTERM', cleanup);
   }
-
-  // Graceful shutdown
-  const cleanup = () => {
-    watcher?.stop();
-    sessionWatcher?.destroy();
-    shell.kill();
-    if (socket) socket.disconnect();
-    process.exit(0);
-  };
-
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
 }
 
 export const startCommand = new Command('start')
