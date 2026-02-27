@@ -383,59 +383,60 @@ function SessionItem({
                         {session.sessionId.slice(0, 8)}
                     </div>
                 </div>
+
+                {/* Actions (Rename / Delete) */}
+                {!showConfirm && (
+                    <div className="flex-shrink-0 flex items-center gap-0.5 opacity-50 md:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity self-center ml-1">
+                        <span
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setEditValue(displayName);
+                                setIsEditing(true);
+                            }}
+                            className="p-2 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                            title={t('renameSession')}
+                        >
+                            <Pencil size={14} />
+                        </span>
+                        <span
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowConfirm(true);
+                            }}
+                            className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            title={t('deleteSession')}
+                        >
+                            <Trash2 size={14} />
+                        </span>
+                    </div>
+                )}
             </button>
-
-            {!showConfirm && (
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setEditValue(displayName);
-                        setIsEditing(true);
-                    }}
-                    className="absolute right-8 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-gray-600 hover:text-blue-300 hover:bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-all"
-                    title={t('renameSession')}
-                >
-                    <Pencil size={14} />
-                </button>
-            )}
-
-            {/* Delete button - appears on hover */}
-            {!showConfirm && (
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setShowConfirm(true);
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-gray-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
-                    title={t('deleteSession')}
-                >
-                    <Trash2 size={14} />
-                </button>
-            )}
 
             {/* Delete confirmation */}
             {showConfirm && (
-                <div className="absolute inset-0 bg-gray-900/95 flex items-center justify-center gap-2 px-3 z-10">
-                    <span className="text-xs text-gray-300 flex-1 truncate">{t('deleteSessionConfirm')}</span>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setShowConfirm(false);
-                            onDelete();
-                        }}
-                        className="px-2.5 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded-md font-medium transition-colors flex-shrink-0"
-                    >
-                        {t('deleteSession')}
-                    </button>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setShowConfirm(false);
-                        }}
-                        className="px-2.5 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md font-medium transition-colors flex-shrink-0"
-                    >
-                        {t('cancel')}
-                    </button>
+                <div className="absolute inset-0 bg-gray-950/95 backdrop-blur-sm rounded-xl flex items-center justify-between gap-2 px-4 shadow-[0_0_15px_rgba(0,0,0,0.5)] z-10 border border-red-900/50">
+                    <span className="text-xs font-medium text-gray-200 truncate">{t('deleteSessionConfirm')}</span>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowConfirm(false);
+                            }}
+                            className="px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg font-medium transition-colors"
+                        >
+                            {t('cancel')}
+                        </button>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowConfirm(false);
+                                onDelete();
+                            }}
+                            className="px-3 py-1.5 text-xs bg-red-600/90 hover:bg-red-500 text-white rounded-lg font-medium shadow-sm transition-colors"
+                        >
+                            {t('deleteSession')}
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
