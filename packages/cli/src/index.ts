@@ -14,7 +14,8 @@ program
   .version('0.1.0')
   // 기본 액션: pocket-ai [engine] 형태로 실행 (engine 미지정 시 claude)
   // 예: pocket-ai → claude, pocket-ai codex → codex, pocket-ai gemini → gemini
-  .argument('[engine]', 'AI 엔진 선택 (claude, codex, gemini)', 'claude')
+  .argument('[engine]', 'AI 엔진 선택 (claude, codex, gemini 또는 커스텀)', 'claude')
+  .option('--cmd <command>', '커스텀 AI CLI 명령어 (예: "aider --model gpt-4")')
   .action(async (engine: string, options) => {
     const { startSession } = await import('./commands/start.js');
     await startSession(engine || 'claude', options);

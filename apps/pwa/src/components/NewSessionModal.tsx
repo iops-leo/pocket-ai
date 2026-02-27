@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, FolderOpen, Cpu, Terminal, Loader2, Pin, PinOff, Trash2 } from 'lucide-react';
+import { X, FolderOpen, Cpu, Terminal, Loader2, Pin, PinOff, Trash2, Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 interface RecentPathItem {
@@ -18,11 +18,13 @@ interface NewSessionModalProps {
     enabledEngines?: string[];
 }
 
-const ENGINES = [
+const PRESET_ENGINES = [
     { id: 'claude', name: 'Claude', color: 'bg-orange-500' },
     { id: 'gemini', name: 'Gemini', color: 'bg-blue-500' },
     { id: 'codex', name: 'Codex', color: 'bg-emerald-500' },
 ];
+
+const CUSTOM_ENGINE_ID = '__custom__';
 
 const QUICK_PATHS = [
     { label: '~', path: '~' },
@@ -40,6 +42,8 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
     const [cwd, setCwd] = useState('');
     const [sessionName, setSessionName] = useState('');
     const [engine, setEngine] = useState('claude');
+    const [customEngineName, setCustomEngineName] = useState('');
+    const isCustomSelected = engine === CUSTOM_ENGINE_ID;
     const [recentEngineFilter, setRecentEngineFilter] = useState('all');
     const [pinnedPaths, setPinnedPaths] = useState<string[]>([]);
     const [hiddenPaths, setHiddenPaths] = useState<string[]>([]);
@@ -48,13 +52,13 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
     const panelRef = useRef<HTMLDivElement>(null);
 
     const enabledEngineSet = useMemo(() => {
-        const source = enabledEngines ?? ENGINES.map(item => item.id);
+        const source = enabledEngines ?? PRESET_ENGINES.map(item => item.id);
         return new Set(source.map(item => item.trim().toLowerCase()));
     }, [enabledEngines]);
 
     useEffect(() => {
         if (enabledEngineSet.has(engine)) return;
-        const nextEnabled = ENGINES.find(item => enabledEngineSet.has(item.id))?.id;
+        const nextEnabled = PRESET_ENGINES.find(item => enabledEngineSet.has(item.id))?.id;
         if (nextEnabled) {
             setEngine(nextEnabled);
         }
@@ -167,8 +171,13 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
             setError(t('pathRequired'));
             return;
         }
-        if (!enabledEngineSet.has(engine)) {
+        const resolvedEngine = isCustomSelected ? customEngineName.trim().toLowerCase() : engine;
+        if (!isCustomSelected && !enabledEngineSet.has(engine)) {
             setError(t('engineNotOnline'));
+            return;
+        }
+        if (isCustomSelected && !customEngineName.trim()) {
+            setError(t('customEngineRequired'));
             return;
         }
 
@@ -177,7 +186,7 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
         try {
             await onSubmit({
                 cwd: cwd.trim(),
-                engine,
+                engine: resolvedEngine,
                 sessionName: sessionName.trim() || undefined,
             });
             onClose();
@@ -336,8 +345,8 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
                             <Cpu size={14} className="inline mr-1.5" />
                             {t('engine')}
                         </label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {ENGINES.map(eng => (
+                        <div className="grid grid-cols-4 gap-2">
+                            {PRESET_ENGINES.map(eng => (
                                 <button
                                     key={eng.id}
                                     type="button"
@@ -360,10 +369,39 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
                                     </div>
                                 </button>
                             ))}
+                            <button
+                                type="button"
+                                onClick={() => setEngine(CUSTOM_ENGINE_ID)}
+                                className={`p-3 rounded-xl border text-center transition-all ${
+                                    isCustomSelected
+                                        ? 'border-blue-500 bg-blue-600/20'
+                                        : 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                                }`}
+                            >
+                                <Plus size={12} className="mx-auto mb-2 text-purple-400" />
+                                <div className="text-sm font-medium text-white">
+                                    {t('customEngine')}
+                                </div>
+                            </button>
                         </div>
-                        <p className="text-[11px] text-gray-500 mt-2">
-                            {t('engineOnlineOnly')}
-                        </p>
+                        {isCustomSelected ? (
+                            <div className="mt-2 space-y-2">
+                                <input
+                                    type="text"
+                                    value={customEngineName}
+                                    onChange={(e) => setCustomEngineName(e.target.value)}
+                                    placeholder={t('customEnginePlaceholder')}
+                                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-mono"
+                                />
+                                <p className="text-[11px] text-gray-500">
+                                    {t('customEngineHint')}
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="text-[11px] text-gray-500 mt-2">
+                                {t('engineOnlineOnly')}
+                            </p>
+                        )}
                     </div>
 
                     {/* Error */}
@@ -390,7 +428,7 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
                         </button>
                         <button
                             type="submit"
-                            disabled={isSubmitting || enabledEngineSet.size === 0}
+                            disabled={isSubmitting || (!isCustomSelected && enabledEngineSet.size === 0)}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium text-sm transition-colors"
                         >
                             {isSubmitting ? (

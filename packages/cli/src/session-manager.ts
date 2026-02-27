@@ -117,14 +117,34 @@ export class SessionWatcher {
 }
 
 /**
- * 지원하는 AI 엔진 목록
+ * 프리셋 AI 엔진 목록 (특별 처리가 있는 엔진)
  */
-export const SUPPORTED_ENGINES = ['claude', 'codex', 'gemini'] as const;
-export type SupportedEngine = typeof SUPPORTED_ENGINES[number];
+export const PRESET_ENGINES = ['claude', 'codex', 'gemini'] as const;
+export type PresetEngine = typeof PRESET_ENGINES[number];
+
+/** backward-compat alias */
+export const SUPPORTED_ENGINES = PRESET_ENGINES;
+export type SupportedEngine = PresetEngine;
 
 /**
- * 엔진 유효성 검증
+ * 프리셋 엔진 여부 확인
  */
-export function isValidEngine(engine: string): engine is SupportedEngine {
-  return SUPPORTED_ENGINES.includes(engine as SupportedEngine);
+export function isPresetEngine(engine: string): engine is PresetEngine {
+  return PRESET_ENGINES.includes(engine as PresetEngine);
+}
+
+/**
+ * 엔진 유효성 검증: 비어있지 않은 문자열이면 모두 허용 (커스텀 엔진 지원)
+ */
+export function isValidEngine(engine: string): boolean {
+  return engine.trim().length > 0;
+}
+
+/**
+ * 커스텀 명령어에서 엔진명 추출 (첫 번째 단어의 바이너리명)
+ * e.g. "/usr/local/bin/aider --model gpt-4" → "aider"
+ */
+export function extractEngineName(cmd: string): string {
+  const first = cmd.trim().split(/\s+/)[0];
+  return first.split('/').pop()?.split('\\').pop() || first;
 }

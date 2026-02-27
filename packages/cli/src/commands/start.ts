@@ -7,7 +7,7 @@ import { generateECDHKeyPair, exportPublicKey, exportPrivateKey, importPublicKey
 import { getToken, saveSessionKeys, loadSessionKeys } from '../config.js';
 import { connectToServer, registerSession } from '../server/connection.js';
 import type { Socket } from 'socket.io-client';
-import { SessionWatcher, getSessionDisplayName, isValidEngine } from '../session-manager.js';
+import { SessionWatcher, getSessionDisplayName, isValidEngine, isPresetEngine, extractEngineName } from '../session-manager.js';
 import { createSessionTranscriptWatcher } from '../utils/session-watcher.js';
 import { collectSlashCommands } from '../utils/slash-commands.js';
 import { ClaudeStreamBridge } from '../utils/claude-stream.js';
@@ -18,6 +18,7 @@ interface StartOptions {
   cwd?: string;
   attachSession?: string;
   headless?: boolean;
+  cmd?: string;
 }
 
 function resolveWorkingDirectory(input?: string): string {
@@ -94,10 +95,16 @@ export async function startSession(command: string = 'claude', options: StartOpt
   const attachSessionId = options.attachSession?.trim() || '';
   const headless = Boolean(options.headless);
 
-  console.log(`Pocket AI - ${command} 세션을 시작합니다... (${resolvedCwd})`);
-
   const cwd = process.cwd();
-  const engine = command.trim().toLowerCase();
+
+  // --cmd가 지정된 경우: 커스텀 엔진
+  const customCmd = options.cmd?.trim() || '';
+  const engine = customCmd
+    ? extractEngineName(customCmd)
+    : command.trim().toLowerCase();
+  const isCustomEngine = Boolean(customCmd);
+
+  console.log(`Pocket AI - ${isCustomEngine ? customCmd : command} 세션을 시작합니다... (${resolvedCwd})`);
 
   const existingKeys = loadSessionKeys(cwd, engine);
 
@@ -211,7 +218,8 @@ export async function startSession(command: string = 'claude', options: StartOpt
   //
   // Codex/Gemini: 기존 PTY + JSONL/텍스트 릴레이 방식 유지.
 
-  const useClaude = engine === 'claude';
+  // Claude JSON 스트리밍은 프리셋 claude 엔진에서만 사용
+  const useClaude = !isCustomEngine && engine === 'claude';
   let socket: Socket | null = null;
   let sharedSecret: CryptoKey | null = null;
 
@@ -339,7 +347,7 @@ export async function startSession(command: string = 'claude', options: StartOpt
           ? payload.metadata.engine.trim().toLowerCase() : '';
         const requestedCwd = typeof payload?.metadata?.cwd === 'string'
           ? payload.metadata.cwd.trim() : '';
-        if (!requestedEngine || !isValidEngine(requestedEngine) || !requestedCwd) return;
+        if (!requestedEngine || !isPresetEngine(requestedEngine) || !requestedCwd) return;
         console.log(`[Pocket AI] 원격 세션 생성 요청: ${payload.sessionId.slice(0, 8)}... (${requestedEngine})`);
         spawnSessionFromRequest({ sessionId: payload.sessionId, engine: requestedEngine, cwd: requestedCwd });
       });
@@ -368,7 +376,12 @@ export async function startSession(command: string = 'claude', options: StartOpt
       process.exit(1);
     }
 
-    const shell = pty.default.spawn(command, [], {
+    // 커스텀 명령어 파싱: "aider --model gpt-4" → binary="aider", args=["--model", "gpt-4"]
+    const ptyParts = isCustomEngine ? customCmd.split(/\s+/) : [command];
+    const ptyBinary = ptyParts[0];
+    const ptyArgs = ptyParts.slice(1);
+
+    const shell = pty.default.spawn(ptyBinary, ptyArgs, {
       name: 'xterm-256color',
       cols: process.stdout.columns || 80,
       rows: process.stdout.rows || 24,
@@ -376,15 +389,17 @@ export async function startSession(command: string = 'claude', options: StartOpt
       env: { ...process.env },
     });
 
-    // JSONL session watcher (Codex만 해당, Gemini는 PTY 텍스�� 릴레이)
-    const sessionWatcher = createSessionTranscriptWatcher(engine, cwd, (events) => {
-      for (const event of events) relayEvent(event);
-    });
+    // 커스텀 엔진은 세션 파일 감시 없음 → 순수 PTY 텍스트 릴레이
+    const sessionWatcher = isCustomEngine
+      ? null
+      : createSessionTranscriptWatcher(engine, cwd, (events) => {
+        for (const event of events) relayEvent(event);
+      });
     sessionWatcher?.start();
     const shouldRelayPtyText = !sessionWatcher;
 
-    // PTY 권한 프롬프트 감지 (Codex/Gemini)
-    const isDetectableEngine = engine === 'codex' || engine === 'gemini';
+    // 프롬프트 감지는 프리셋 엔진(codex/gemini)에서만
+    const isDetectableEngine = !isCustomEngine && (engine === 'codex' || engine === 'gemini');
     const promptDetector = isDetectableEngine
       ? new PtyPromptDetector(engine as 'codex' | 'gemini', (request) => {
         relayEvent(request);
@@ -464,7 +479,7 @@ export async function startSession(command: string = 'claude', options: StartOpt
           ? payload.metadata.engine.trim().toLowerCase() : '';
         const requestedCwd = typeof payload?.metadata?.cwd === 'string'
           ? payload.metadata.cwd.trim() : '';
-        if (!requestedEngine || !isValidEngine(requestedEngine) || !requestedCwd) return;
+        if (!requestedEngine || !isPresetEngine(requestedEngine) || !requestedCwd) return;
         console.log(`[Pocket AI] 원격 세션 생성 요청: ${payload.sessionId.slice(0, 8)}... (${requestedEngine})`);
         spawnSessionFromRequest({ sessionId: payload.sessionId, engine: requestedEngine, cwd: requestedCwd });
       });
@@ -484,12 +499,12 @@ export async function startSession(command: string = 'claude', options: StartOpt
         const input = data.toString();
         if (input.startsWith('/switch ')) {
           const newEngine = input.slice(8).trim();
-          if (isValidEngine(newEngine)) {
+          if (newEngine) {
             console.log(`\n[Pocket AI] AI 엔진을 ${newEngine}으로 전환합니다...`);
             console.log('(구현 예정: 현재는 수동으로 Ctrl+C 후 pocket-ai start ' + newEngine + ' 실행)\n');
           } else {
-            console.log(`\n[Pocket AI] 지원하지 않는 엔진입니다: ${newEngine}`);
-            console.log('지원 엔진: claude, codex, gemini\n');
+            console.log(`\n[Pocket AI] 엔진 이름을 입력해주세요.`);
+            console.log('예: /switch claude, /switch codex, /switch aider\n');
           }
           return;
         }
@@ -517,4 +532,5 @@ export const startCommand = new Command('start')
   .option('--attach-session <id>', '기존 sessionId에 attach (내부용)')
   .option('--headless', '백그라운드(원격 전용) 모드')
   .option('--no-remote', '원격 접속 비활성화 (로컬 전용)')
+  .option('--cmd <command>', '커스텀 AI CLI 명령어 (예: "aider --model gpt-4")')
   .action(startSession);
