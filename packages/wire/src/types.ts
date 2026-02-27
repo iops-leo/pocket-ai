@@ -44,13 +44,21 @@ export interface SessionMessageInputResponse {
     message?: string;
 }
 
+/** PWA에서 CLI 동작을 원격 제어 (퍼미션 모드, 모델 변경 등) */
+export interface SessionMessageControlCommand {
+    t: 'control-command';
+    command: 'set-permission-mode' | 'set-model';
+    value: string;
+}
+
 export type SessionPayload =
     | SessionMessageText
     | SessionMessageToolCall
     | SessionMessageToolResult
     | SessionEventMessage
     | SessionMessageInputRequest
-    | SessionMessageInputResponse;
+    | SessionMessageInputResponse
+    | SessionMessageControlCommand;
 
 /**
  * Standard REST API response format.

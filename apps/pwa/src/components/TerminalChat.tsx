@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, History, ArrowUp } from 'lucide-react';
+import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, History, ArrowUp, Settings } from 'lucide-react';
+import { ChatSettingsPanel, type ChatSettings } from './ChatSettingsPanel';
 import { SlashCommandDropdown, type SlashCommand } from './SlashCommandDropdown';
 import { io, Socket } from 'socket.io-client';
 import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt, unwrapSessionKey, type EncryptedData, type MessagesResponse } from '@pocket-ai/wire';
@@ -33,6 +34,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const [isAiThinking, setIsAiThinking] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [systemError, setSystemError] = useState<string | null>(null);
+    const [showChatSettings, setShowChatSettings] = useState(false);
+    const [chatSettings, setChatSettings] = useState<ChatSettings>({ permissionMode: 'default', model: 'default' });
 
     // 슬래시 명령어
     const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(() => {
@@ -427,6 +430,46 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         }
     }, [isDisconnected, sessionId]);
 
+    const MODEL_IDS: Record<string, string> = {
+        adaptive: 'claude-sonnet-4-5',
+        sonnet: 'claude-sonnet-4-6',
+        opus: 'claude-opus-4-6',
+    };
+
+    const handleSettingsChange = useCallback(async (newSettings: ChatSettings) => {
+        const encryptKey = sessionKeyRef.current || sharedSecretRef.current;
+        setChatSettings(newSettings);
+
+        if (!socketRef.current || !encryptKey || isDisconnected) return;
+
+        const prev = chatSettings;
+
+        // 퍼미션 모드 변경
+        if (newSettings.permissionMode !== prev.permissionMode) {
+            try {
+                const cmd = JSON.stringify({ t: 'control-command', command: 'set-permission-mode', value: newSettings.permissionMode });
+                const encrypted = await encrypt(cmd, encryptKey);
+                socketRef.current.emit('update', { sessionId, sender: 'pwa', body: encrypted });
+            } catch (err) {
+                console.error('Failed to send permission mode command', err);
+            }
+        }
+
+        // 모델 변경
+        if (newSettings.model !== prev.model) {
+            const modelId = MODEL_IDS[newSettings.model] ?? '';
+            if (modelId) {
+                try {
+                    const cmd = JSON.stringify({ t: 'control-command', command: 'set-model', value: modelId });
+                    const encrypted = await encrypt(cmd, encryptKey);
+                    socketRef.current.emit('update', { sessionId, sender: 'pwa', body: encrypted });
+                } catch (err) {
+                    console.error('Failed to send model command', err);
+                }
+            }
+        }
+    }, [chatSettings, isDisconnected, sessionId]);
+
     const handleInterrupt = useCallback(async () => {
         const encryptKey = sessionKeyRef.current || sharedSecretRef.current;
         if (!socketRef.current || !encryptKey || isDisconnected) return;
@@ -535,6 +578,13 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                             <ClipboardPaste size={15} />
                         </button>
                     )}
+                    <button
+                        onClick={() => setShowChatSettings(prev => !prev)}
+                        className={`p-2 rounded-lg transition-colors border ${showChatSettings ? 'text-blue-400 bg-blue-500/10 border-blue-500/30' : 'text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-700 border-gray-700/50'}`}
+                        title="Settings"
+                    >
+                        <Settings size={15} />
+                    </button>
                 </div>
             </header>
 
@@ -554,6 +604,14 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
             {/* Main chat area */}
             <main className="flex-1 relative w-full min-h-0 bg-gray-950 flex flex-col">
+                {showChatSettings && (
+                    <ChatSettingsPanel
+                        settings={chatSettings}
+                        onSettingsChange={handleSettingsChange}
+                        onClose={() => setShowChatSettings(false)}
+                        isClaudeEngine={sessionMeta.engine === 'claude' || !sessionMeta.engine}
+                    />
+                )}
                 {/* 연결 중 오버레이 */}
                 {(isConnecting || isLoadingHistory) && !isDisconnected && messages.length === 0 && (
                     <div className="absolute inset-0 z-10 bg-gray-950/85 flex flex-col items-center justify-center text-gray-300 gap-4 backdrop-blur-sm">

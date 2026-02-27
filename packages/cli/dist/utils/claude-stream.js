@@ -7,6 +7,13 @@ export class ClaudeStreamBridge {
     destroyed = false;
     claudeSessionId = null;
     waitingForInput = false;
+    permissionMode = 'default';
+    setPermissionMode(mode) {
+        this.permissionMode = mode;
+    }
+    getPermissionMode() {
+        return this.permissionMode;
+    }
     constructor(options) {
         this.options = options;
     }
@@ -268,6 +275,29 @@ export class ClaudeStreamBridge {
             return;
         const toolName = request.tool_name;
         const toolInput = request.input;
+        // ─── 퍼미션 모드에 따른 자동 처리 ───
+        if (this.permissionMode === 'yolo') {
+            if (!this.options.headless)
+                console.log(`\n[Yolo] 자동 허용: ${toolName}`);
+            this.writeJson({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response: { behavior: 'allow', updatedInput: toolInput } } });
+            return;
+        }
+        if (this.permissionMode === 'planMode') {
+            if (!this.options.headless)
+                console.log(`\n[Plan Mode] 자동 거부: ${toolName}`);
+            this.writeJson({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response: { behavior: 'deny', message: 'Plan mode: 실행 작업은 허용되지 않습니다.' } } });
+            return;
+        }
+        if (this.permissionMode === 'acceptEdits') {
+            const editToolKeywords = ['write', 'edit', 'create', 'str_replace', 'patch', 'insert', 'delete', 'rename', 'move', 'notebook'];
+            const isEditTool = editToolKeywords.some(k => toolName.toLowerCase().includes(k));
+            if (isEditTool) {
+                if (!this.options.headless)
+                    console.log(`\n[Accept Edits] 자동 허용: ${toolName}`);
+                this.writeJson({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response: { behavior: 'allow', updatedInput: toolInput } } });
+                return;
+            }
+        }
         if (!this.options.headless) {
             console.log(`\n[권한 요청] ${toolName} — 원격 응답 대기 중...`);
         }

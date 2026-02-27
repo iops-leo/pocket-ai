@@ -8,6 +8,7 @@ import type { SessionPayload, SessionMessageInputRequest } from '@pocket-ai/wire
  * Happy 프로젝트의 query.ts 패턴 참고:
  * https://github.com/slopus/happy/blob/main/packages/happy-cli/src/claude/sdk/query.ts
  */
+export type PermissionMode = 'default' | 'acceptEdits' | 'planMode' | 'yolo';
 export interface ClaudeStreamOptions {
     cwd: string;
     sessionId?: string;
@@ -25,6 +26,9 @@ export declare class ClaudeStreamBridge {
     private destroyed;
     private claudeSessionId;
     private waitingForInput;
+    private permissionMode;
+    setPermissionMode(mode: PermissionMode): void;
+    getPermissionMode(): PermissionMode;
     constructor(options: ClaudeStreamOptions);
     /**
      * Claude 프로세스를 JSON 스트리밍 모드로 스폰한다.

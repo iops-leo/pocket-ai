@@ -12,6 +12,8 @@ import type { SessionPayload, SessionMessageInputRequest } from '@pocket-ai/wire
  * https://github.com/slopus/happy/blob/main/packages/happy-cli/src/claude/sdk/query.ts
  */
 
+export type PermissionMode = 'default' | 'acceptEdits' | 'planMode' | 'yolo';
+
 export interface ClaudeStreamOptions {
     cwd: string;
     sessionId?: string;
@@ -35,6 +37,15 @@ export class ClaudeStreamBridge {
     private destroyed = false;
     private claudeSessionId: string | null = null;
     private waitingForInput = false;
+    private permissionMode: PermissionMode = 'default';
+
+    setPermissionMode(mode: PermissionMode): void {
+        this.permissionMode = mode;
+    }
+
+    getPermissionMode(): PermissionMode {
+        return this.permissionMode;
+    }
 
     constructor(options: ClaudeStreamOptions) {
         this.options = options;
@@ -335,6 +346,27 @@ export class ClaudeStreamBridge {
 
         const toolName = request.tool_name as string;
         const toolInput = request.input as Record<string, unknown>;
+
+        // ─── 퍼미션 모드에 따른 자동 처리 ───
+        if (this.permissionMode === 'yolo') {
+            if (!this.options.headless) console.log(`\n[Yolo] 자동 허용: ${toolName}`);
+            this.writeJson({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response: { behavior: 'allow', updatedInput: toolInput } } });
+            return;
+        }
+        if (this.permissionMode === 'planMode') {
+            if (!this.options.headless) console.log(`\n[Plan Mode] 자동 거부: ${toolName}`);
+            this.writeJson({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response: { behavior: 'deny', message: 'Plan mode: 실행 작업은 허용되지 않습니다.' } } });
+            return;
+        }
+        if (this.permissionMode === 'acceptEdits') {
+            const editToolKeywords = ['write', 'edit', 'create', 'str_replace', 'patch', 'insert', 'delete', 'rename', 'move', 'notebook'];
+            const isEditTool = editToolKeywords.some(k => toolName.toLowerCase().includes(k));
+            if (isEditTool) {
+                if (!this.options.headless) console.log(`\n[Accept Edits] 자동 허용: ${toolName}`);
+                this.writeJson({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response: { behavior: 'allow', updatedInput: toolInput } } });
+                return;
+            }
+        }
 
         if (!this.options.headless) {
             console.log(`\n[권한 요청] ${toolName} — 원격 응답 대기 중...`);

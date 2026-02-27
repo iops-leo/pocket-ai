@@ -318,6 +318,18 @@ export async function startSession(command = 'claude', options = {}) {
                     bridge.interrupt();
                     console.log('[Pocket AI] 인터럽트 신호 전송');
                 }
+                // PWA → Claude: 원격 설정 변경 (퍼미션 모드, 모델)
+                if (msg.t === 'control-command') {
+                    const cmd = msg;
+                    if (cmd.command === 'set-permission-mode') {
+                        bridge.setPermissionMode(cmd.value);
+                        console.log(`[Pocket AI] 퍼미션 모드 변경: ${cmd.value}`);
+                    }
+                    else if (cmd.command === 'set-model' && cmd.value && cmd.value !== 'default') {
+                        bridge.sendMessage(`/model ${cmd.value}`);
+                        console.log(`[Pocket AI] 모델 변경 요청: ${cmd.value}`);
+                    }
+                }
             }));
             socket.on('session-spawn-request', (payload) => {
                 if (!payload || typeof payload.sessionId !== 'string')
