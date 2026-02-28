@@ -35,7 +35,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [systemError, setSystemError] = useState<string | null>(null);
     const [showChatSettings, setShowChatSettings] = useState(false);
-    const [chatSettings, setChatSettings] = useState<ChatSettings>({ permissionMode: 'default', model: 'default' });
+    const [chatSettings, setChatSettings] = useState<ChatSettings>({ permissionMode: 'default', model: 'default', customWorkers: [], builtinWorkers: { gemini: true, codex: true, aider: true } });
 
     // 슬래시 명령어
     const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(() => {
@@ -56,6 +56,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const historyLoadedRef = useRef(false);
     const hasWarmCacheRef = useRef(false);
+    // CLI 로컬 이력 스트리밍 중 플래그 (서버 이력 fetch와 충돌 방지)
+    const cliHistoryActiveRef = useRef(false);
     const loadMessageHistoryRef = useRef<(key: CryptoKey, options?: { silent?: boolean }) => Promise<void>>(async () => { });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const initConnectionRef = useRef<(socket: any) => Promise<void>>(async () => { });
@@ -124,7 +126,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                 }
             }
 
-            if (decryptedMessages.length > 0) {
+            // CLI 로컬 이력이 이미 도착 중이면 서버 이력으로 덮어쓰지 않음
+            if (decryptedMessages.length > 0 && !cliHistoryActiveRef.current) {
                 setMessages(decryptedMessages);
                 lastSeqRef.current = data.messages[data.messages.length - 1]?.seq;
             }
@@ -256,25 +259,38 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                         if (msg.event === 'stopped-typing') {
                             setIsAiThinking(false);
                         }
+                        if (msg.event === 'history-start') {
+                            cliHistoryActiveRef.current = true;
+                            historyLoadedRef.current = true; // 서버 fetch 방지
+                            setMessages([]);
+                            setIsLoadingHistory(true);
+                        }
+                        if (msg.event === 'history-end') {
+                            cliHistoryActiveRef.current = false;
+                            setIsLoadingHistory(false);
+                        }
                     }
 
                     if (msg.t === 'text') {
+                        const isHistory = Boolean(msg._history);
                         setMessages(prev => [...prev, {
                             kind: 'text',
                             id: crypto.randomUUID(),
-                            role: 'assistant' as const,
+                            role: (isHistory && msg.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
                             content: msg.text,
-                            timestamp: Date.now(),
+                            timestamp: (isHistory && msg._ts) ? msg._ts : Date.now(),
                         }]);
                     }
 
                     if (msg.t === 'tool-call') {
+                        const isHistory = Boolean(msg._history);
                         setMessages(prev => [...prev, {
                             kind: 'tool',
                             id: msg.id,
                             name: msg.name,
                             args: msg.arguments,
                             status: 'running' as const,
+                            ...(isHistory ? {} : { startTime: Date.now() }),
                         }]);
                     }
 
@@ -452,6 +468,28 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                 socketRef.current.emit('update', { sessionId, sender: 'pwa', body: encrypted });
             } catch (err) {
                 console.error('Failed to send permission mode command', err);
+            }
+        }
+
+        // 커스텀 worker 변경
+        if (JSON.stringify(newSettings.customWorkers) !== JSON.stringify(prev.customWorkers)) {
+            try {
+                const cmd = JSON.stringify({ t: 'control-command', command: 'set-workers', workers: newSettings.customWorkers });
+                const encrypted = await encrypt(cmd, encryptKey);
+                socketRef.current.emit('update', { sessionId, sender: 'pwa', body: encrypted });
+            } catch (err) {
+                console.error('Failed to send workers command', err);
+            }
+        }
+
+        // 빌트인 worker 토글 변경
+        if (JSON.stringify(newSettings.builtinWorkers) !== JSON.stringify(prev.builtinWorkers)) {
+            try {
+                const cmd = JSON.stringify({ t: 'control-command', command: 'set-builtin-workers', workers: newSettings.builtinWorkers });
+                const encrypted = await encrypt(cmd, encryptKey);
+                socketRef.current.emit('update', { sessionId, sender: 'pwa', body: encrypted });
+            } catch (err) {
+                console.error('Failed to send builtin workers command', err);
             }
         }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Terminal, Shield, Wifi, Cpu, ArrowRight, Github, Lock, Zap } from 'lucide-react';
+import { Loader2, Terminal, Shield, Wifi, ArrowRight, Lock, Zap, Smartphone, Share2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 export default function LandingPage() {
@@ -59,10 +59,10 @@ export default function LandingPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Chakra+Petch:wght@600;700&display=swap');
 
         .f-mono { font-family: 'JetBrains Mono', 'Cascadia Code', monospace; }
-        .f-display { font-family: 'Syne', system-ui, sans-serif; }
+        .f-display { font-family: 'Chakra Petch', system-ui, sans-serif; }
 
         .grid-bg {
           background-image:
@@ -102,7 +102,7 @@ export default function LandingPage() {
           display: inline-flex; align-items: center; gap: 10px;
           padding: 14px 30px; border-radius: 14px;
           background: linear-gradient(135deg, #00f5a0 0%, #00d4ff 100%);
-          color: #050810; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px;
+          color: #050810; font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 15px;
           box-shadow: 0 0 32px rgba(0,245,160,.28); border: none; cursor: pointer;
           transition: box-shadow .2s, transform .2s;
         }
@@ -209,7 +209,7 @@ export default function LandingPage() {
                 </div>
 
                 {/* Body */}
-                <div className="scan-lines f-mono" style={{ padding: '20px 24px', minHeight: 270, background: '#0d1117', fontSize: 13, lineHeight: 1.9 }}>
+                <div className="scan-lines f-mono" style={{ padding: '20px 24px', height: 318, overflow: 'hidden', background: '#0d1117', fontSize: 13, lineHeight: 1.9 }}>
                   <div style={{ color: '#3d444d' }}>Last login: Fri Feb 28 at macbook.local</div>
                   <br />
                   <div>
@@ -230,20 +230,18 @@ export default function LandingPage() {
                       </div>
                     </>
                   )}
-                  {typingStep >= 6 && (
-                    <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #21262d', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-                      {[
-                        { icon: <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#00f5a0' }} />, label: 'ONLINE', color: '#00f5a0' },
-                        { icon: <Shield size={10} color="#00d4ff" />, label: 'E2E ENCRYPTED', color: '#00d4ff' },
-                        { icon: <Wifi size={10} color="#7d8590" />, label: 'LOW LATENCY', color: '#7d8590' },
-                      ].map(s => (
-                        <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                          {s.icon}
-                          <span className="f-mono" style={{ fontSize: 10, color: s.color }}>{s.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #21262d', display: 'flex', gap: 20, flexWrap: 'wrap', opacity: typingStep >= 6 ? 1 : 0, transition: 'opacity 0.4s ease' }}>
+                    {[
+                      { icon: <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#00f5a0' }} />, label: 'ONLINE', color: '#00f5a0' },
+                      { icon: <Shield size={10} color="#00d4ff" />, label: 'E2E ENCRYPTED', color: '#00d4ff' },
+                      { icon: <Wifi size={10} color="#7d8590" />, label: 'LOW LATENCY', color: '#7d8590' },
+                    ].map(s => (
+                      <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {s.icon}
+                        <span className="f-mono" style={{ fontSize: 10, color: s.color }}>{s.label}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -262,7 +260,7 @@ export default function LandingPage() {
           <div className="ticker" style={{ display: 'flex', width: 'max-content', whiteSpace: 'nowrap' }}>
             {[0, 1].map(ri => (
               <span key={ri} className="f-mono" style={{ fontSize: 11, color: '#3d444d', letterSpacing: '0.06em' }}>
-                {['Claude Code', 'Codex CLI', 'Gemini CLI', 'AES-256-GCM', 'E2E Encrypted', 'WebSocket Relay', 'PWA Native', 'Mobile First', 'Free & Open'].map((item, i) => (
+                {['Claude Code', 'Codex CLI', 'Gemini CLI', 'Multi-Model Orchestration', 'MCP Protocol', 'AES-256-GCM', 'E2E Encrypted', 'PWA Native', 'Mobile First', 'Local Daemon'].map((item, i) => (
                   <span key={i}><span style={{ color: '#00f5a0', margin: '0 16px' }}>✦</span>{item}</span>
                 ))}
               </span>
@@ -275,16 +273,53 @@ export default function LandingPage() {
           <div style={{ textAlign: 'center', marginBottom: 60 }}>
             <p className="f-mono" style={{ fontSize: 11, color: '#00f5a0', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 14 }}>Why Pocket AI</p>
             <h2 className="f-display" style={{ fontSize: 'clamp(30px,4.5vw,50px)', fontWeight: 900, letterSpacing: '-0.03em', lineHeight: 1.1 }}>
-              <span style={{ color: '#e6edf3' }}>Built for developers,</span><br />
-              <span className="text-g">secured by design</span>
+              <span style={{ color: '#e6edf3' }}>Claude conducts,</span><br />
+              <span className="text-g">your AI team executes.</span>
             </h2>
           </div>
 
+          {/* Orchestration — featured full-width card */}
+          <div
+            className="feat-card"
+            style={{ marginBottom: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, alignItems: 'center' }}
+            onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = 'rgba(0,245,160,.22)'; el.style.boxShadow = '0 0 80px rgba(0,245,160,.08), 0 20px 60px rgba(0,0,0,.5)'; }}
+            onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = '#21262d'; el.style.boxShadow = 'none'; }}
+          >
+            <div>
+              <div className="f-mono" style={{ fontSize: 50, fontWeight: 700, color: '#00f5a0', opacity: 0.12, lineHeight: 1, marginBottom: 10, userSelect: 'none' }}>01</div>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: 'rgba(0,245,160,.1)', border: '1px solid rgba(0,245,160,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+                <Share2 size={20} color="#00f5a0" />
+              </div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 6, background: 'rgba(0,245,160,.08)', border: '1px solid rgba(0,245,160,.2)', marginBottom: 12 }}>
+                <span className="f-mono" style={{ fontSize: 10, color: '#00f5a0', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Pocket AI Exclusive</span>
+              </div>
+              <h3 className="f-display" style={{ fontSize: 20, fontWeight: 700, color: '#e6edf3', marginBottom: 10, letterSpacing: '-0.01em' }}>{t('featureOrch')}</h3>
+              <p style={{ fontSize: 13.5, lineHeight: 1.7, color: '#7d8590' }}>{t('featureOrchDesc')}</p>
+            </div>
+
+            {/* Mini flow diagram */}
+            <div style={{ background: '#080d14', borderRadius: 14, padding: '20px 22px', border: '1px solid #21262d' }}>
+              <div className="f-mono" style={{ fontSize: 11, color: '#3d444d', marginBottom: 14 }}>pocket-ai orchestrator</div>
+              {[
+                { label: t('orchStep1'), color: '#00f5a0', done: true },
+                { label: t('orchStep2'), color: '#00d4ff', done: true },
+                { label: t('orchStep3'), color: '#a78bfa', done: true },
+                { label: t('orchStep4'), color: '#00f5a0', done: false },
+              ].map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,.03)' : 'none' }}>
+                  <span style={{ color: s.done ? s.color : '#3d444d', fontSize: 12, width: 14, flexShrink: 0 }}>{s.done ? '✓' : '›'}</span>
+                  <span className="f-mono" style={{ fontSize: 11, color: s.done ? '#7d8590' : s.color }}>{s.label}</span>
+                  {!s.done && <span className="cursor" style={{ fontSize: 11 }} />}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Bottom 2 cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 18 }}>
             {[
-              { num: '01', icon: <Lock size={20} color="#00f5a0" />, title: t('featureE2E'), desc: t('featureE2EDesc'), accent: '#00f5a0', glow: 'rgba(0,245,160,.1)' },
-              { num: '02', icon: <Cpu size={20} color="#00d4ff" />, title: t('featureRealtime'), desc: t('featureRealtimeDesc'), accent: '#00d4ff', glow: 'rgba(0,212,255,.1)' },
-              { num: '03', icon: <Wifi size={20} color="#a78bfa" />, title: t('featureAnywhere'), desc: t('featureAnywhereDesc'), accent: '#a78bfa', glow: 'rgba(167,139,250,.1)' },
+              { num: '02', icon: <Smartphone size={20} color="#00d4ff" />, title: t('featureControl'), desc: t('featureControlDesc'), accent: '#00d4ff', glow: 'rgba(0,212,255,.1)' },
+              { num: '03', icon: <Lock size={20} color="#a78bfa" />, title: t('featureE2E'), desc: t('featureE2EDesc'), accent: '#a78bfa', glow: 'rgba(167,139,250,.1)' },
             ].map(f => (
               <div
                 key={f.num}
@@ -296,7 +331,7 @@ export default function LandingPage() {
                 <div style={{ width: 42, height: 42, borderRadius: 12, background: f.glow, border: `1px solid ${f.accent}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
                   {f.icon}
                 </div>
-                <h3 className="f-display" style={{ fontSize: 17, fontWeight: 800, color: '#e6edf3', marginBottom: 10, letterSpacing: '-0.01em' }}>{f.title}</h3>
+                <h3 className="f-display" style={{ fontSize: 17, fontWeight: 700, color: '#e6edf3', marginBottom: 10, letterSpacing: '-0.01em' }}>{f.title}</h3>
                 <p style={{ fontSize: 13.5, lineHeight: 1.7, color: '#7d8590' }}>{f.desc}</p>
               </div>
             ))}

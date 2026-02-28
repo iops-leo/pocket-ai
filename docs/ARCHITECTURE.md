@@ -677,7 +677,9 @@ CLI/Daemon Offline         Server                    PWA Client
 **Socket.IO 자동 재연결 장점**:
 - Exponential backoff 내장 (수동 구현 불필요)
 - 연결 복구 시 Room 재참가
-- 오프라인 구간 메시지는 유실 (서버에 히스토리 저장하지 않음 — Pure Relay 원칙)
+- 오프라인 구간 메시지는 **PC 로컬에 저장** (`~/.config/pocket-ai/sessions/{sessionId}/history.jsonl`)
+- PWA 재연결 시 CLI가 로컬 이력(최근 150개 이벤트)을 자동 전송 → `history-start`/`history-end` 프로토콜
+- 서버에는 메시지 히스토리 미보관 (Pure Relay 원칙 유지)
 
 ---
 

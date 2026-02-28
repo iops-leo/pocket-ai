@@ -93,6 +93,7 @@ run_migration() {
 
 # ── 서버 실행 ──────────────────────────────────────────────
 start_server() {
+  kill_port 3001
   log "서버 시작 (http://localhost:3001)"
   cd "$SERVER_DIR"
   # .env 로드해서 dev 실행
@@ -100,8 +101,22 @@ start_server() {
   npm run dev
 }
 
+# ── 포트 점유 프로세스 종료 ─────────────────────────────────
+kill_port() {
+  local port=$1
+  local pids
+  pids=$(lsof -ti :"$port" 2>/dev/null || true)
+  if [[ -n "$pids" ]]; then
+    warn "포트 $port 사용 중 (PID: $pids) → 종료 중..."
+    echo "$pids" | xargs kill -9 2>/dev/null || true
+    sleep 0.5
+    ok "포트 $port 해제됨"
+  fi
+}
+
 # ── PWA 실행 ───────────────────────────────────────────────
 start_pwa() {
+  kill_port 3002
   log "PWA 시작 (http://localhost:3002)"
   cd "$PWA_DIR"
   npm run dev
@@ -109,6 +124,8 @@ start_pwa() {
 
 # ── 동시 실행 (tmux 없을 경우 백그라운드) ──────────────────
 start_all() {
+  kill_port 3001
+  kill_port 3002
   if command -v tmux &>/dev/null; then
     SESSION="pocket-ai"
     tmux kill-session -t "$SESSION" 2>/dev/null || true

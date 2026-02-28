@@ -54,6 +54,52 @@ function spawnSessionFromRequest(payload) {
 function stripAnsi(input) {
     return input.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
 }
+// 설정 파일 경로
+const CONFIG_DIR = path.join(os.homedir(), '.config', 'pocket-ai');
+const WORKERS_FILE = path.join(CONFIG_DIR, 'workers.json');
+const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+const SESSION_HISTORY_DIR = path.join(CONFIG_DIR, 'sessions');
+function getHistoryFile(sid) {
+    return path.join(SESSION_HISTORY_DIR, sid, 'history.jsonl');
+}
+function appendToHistory(sid, event) {
+    try {
+        const dir = path.join(SESSION_HISTORY_DIR, sid);
+        fs.mkdirSync(dir, { recursive: true });
+        fs.appendFileSync(getHistoryFile(sid), JSON.stringify({ ts: Date.now(), event }) + '\n', 'utf-8');
+    }
+    catch { /* 비치명적 */ }
+}
+function loadConfig() {
+    try {
+        if (fs.existsSync(CONFIG_FILE)) {
+            const parsed = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+            return {
+                builtinWorkers: {
+                    gemini: parsed.builtinWorkers?.gemini !== false,
+                    codex: parsed.builtinWorkers?.codex !== false,
+                    aider: parsed.builtinWorkers?.aider !== false,
+                },
+            };
+        }
+    }
+    catch { /* 파싱 실패 시 기본값 사용 */ }
+    return { builtinWorkers: { gemini: true, codex: true, aider: true } };
+}
+function saveConfig(config) {
+    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    const current = loadConfig();
+    const merged = { ...current, ...config, builtinWorkers: { ...current.builtinWorkers, ...config.builtinWorkers } };
+    const tmpPath = CONFIG_FILE + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(merged, null, 2), 'utf-8');
+    fs.renameSync(tmpPath, CONFIG_FILE);
+}
+function saveWorkers(workers) {
+    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    const tmpPath = WORKERS_FILE + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(workers, null, 2), 'utf-8');
+    fs.renameSync(tmpPath, WORKERS_FILE);
+}
 /**
  * AI CLI 세션 시작 (Happy 스타일 심플 래퍼)
  */
@@ -196,6 +242,10 @@ export async function startSession(command = 'claude', options = {}) {
     let sharedSecret = null;
     // 이벤트를 서버로 중계하는 공통 헬퍼
     function relayEvent(event) {
+        // 로컬 이력 저장 (text/tool 이벤트만, session-event 제외)
+        if (event.t === 'text' || event.t === 'tool-call' || event.t === 'tool-result') {
+            appendToHistory(sessionId, event);
+        }
         if (!sessionKey || !socket)
             return;
         encrypt(JSON.stringify(event), sessionKey)
@@ -203,6 +253,35 @@ export async function startSession(command = 'claude', options = {}) {
             socket.emit('update', { sessionId, sender: 'cli', body: encrypted });
         })
             .catch(() => { });
+    }
+    // 로컬 이력을 PWA에 전송 (재연결 시)
+    async function pushHistoryToPwa() {
+        const histFile = getHistoryFile(sessionId);
+        if (!fs.existsSync(histFile) || !sessionKey || !socket)
+            return;
+        try {
+            const lines = fs.readFileSync(histFile, 'utf-8').split('\n').filter(l => l.trim());
+            if (lines.length === 0)
+                return;
+            const recent = lines.slice(-150); // 최근 150개 이벤트
+            const send = async (payload) => {
+                const enc = await encrypt(JSON.stringify(payload), sessionKey);
+                socket.emit('update', { sessionId, sender: 'cli', body: enc });
+            };
+            await send({ t: 'session-event', event: 'history-start', data: { count: recent.length } });
+            for (const line of recent) {
+                try {
+                    const { ts, event } = JSON.parse(line);
+                    await send({ ...event, _ts: ts, _history: true });
+                }
+                catch { /* skip */ }
+            }
+            await send({ t: 'session-event', event: 'history-end' });
+            console.log(`[Pocket AI] 로컬 이력 ${recent.length}개 PWA 전송 완료`);
+        }
+        catch (err) {
+            console.error('[Pocket AI] 이력 전송 실패:', err.message);
+        }
     }
     // PWA 재연결 시 pending permissions 재전송용 (Claude 전용, bridge 생성 후 설정)
     let getPendingInputRequests = null;
@@ -247,6 +326,8 @@ export async function startSession(command = 'claude', options = {}) {
                             console.log(`[Pocket AI] Pending permission 재전송: ${req.toolName}`);
                         }
                     }
+                    // PWA 재연결 시 로컬 이력 전송
+                    await pushHistoryToPwa();
                 }
                 catch (err) {
                     console.error('[Pocket AI] 키교환 실패:', err);
@@ -273,16 +354,10 @@ export async function startSession(command = 'claude', options = {}) {
         // ════════════════════════════════════════════════════
         // Claude 전용: JSON 스트리밍 브릿지 및 MCP 오케스트레이터
         // ════════════════════════════════════════════════════
-        // 1. MCP 오케스트레이터 서버 스폰
+        // 1. MCP 오케스트레이터 ~/.claude/claude.json 등록
+        // Claude가 자체적으로 MCP 서버를 spawn하므로 여기서 프로세스를 띄울 필요 없음
         const mcpServerPath = path.resolve(__dirname, '..', 'mcp', 'orchestrator-server.js');
-        let mcpProcess = null;
         if (fs.existsSync(mcpServerPath)) {
-            mcpProcess = spawn(process.execPath, [mcpServerPath], {
-                stdio: ['ignore', 'ignore', 'ignore'],
-                detached: true,
-            });
-            mcpProcess.unref();
-            // ~/.claude/claude.json 에 MCP 서버 자동 등록
             const claudeConfigPath = path.join(os.homedir(), '.claude', 'claude.json');
             try {
                 let config = {};
@@ -291,19 +366,27 @@ export async function startSession(command = 'claude', options = {}) {
                 }
                 if (!config.mcpServers)
                     config.mcpServers = {};
-                const orchestratorCmd = process.execPath;
-                const orchestratorArgs = [mcpServerPath];
-                // 현재 설정과 다르면 업데이트
-                const currentMcp = config.mcpServers['pocket-ai-orchestrator'];
-                if (!currentMcp || currentMcp.command !== orchestratorCmd || currentMcp.args?.[0] !== orchestratorArgs[0]) {
-                    config.mcpServers['pocket-ai-orchestrator'] = {
-                        command: orchestratorCmd,
-                        args: orchestratorArgs
-                    };
-                    fs.mkdirSync(path.dirname(claudeConfigPath), { recursive: true });
-                    fs.writeFileSync(claudeConfigPath, JSON.stringify(config, null, 2), 'utf-8');
-                    console.log('[Pocket AI] Multi-Model Orchestrator MCP 등록 완료');
-                }
+                // cwd를 env로 주입 → orchestrator-server가 워커 실행 시 올바른 디렉토리 사용
+                const savedCfg = loadConfig();
+                config.mcpServers['pocket-ai-orchestrator'] = {
+                    command: process.execPath,
+                    args: [mcpServerPath],
+                    env: {
+                        POCKET_AI_CWD: cwd,
+                        POCKET_AI_ENABLE_GEMINI: String(savedCfg.builtinWorkers.gemini),
+                        POCKET_AI_ENABLE_AIDER: String(savedCfg.builtinWorkers.aider),
+                        POCKET_AI_ENABLE_CODEX: String(savedCfg.builtinWorkers.codex),
+                        ...(process.env.GEMINI_API_KEY ? { GEMINI_API_KEY: process.env.GEMINI_API_KEY } : {}),
+                        ...(process.env.GOOGLE_API_KEY ? { GOOGLE_API_KEY: process.env.GOOGLE_API_KEY } : {}),
+                        ...(process.env.OPENAI_API_KEY ? { OPENAI_API_KEY: process.env.OPENAI_API_KEY } : {}),
+                    },
+                };
+                // 원자적 쓰기: race condition 방지
+                fs.mkdirSync(path.dirname(claudeConfigPath), { recursive: true });
+                const tmpPath = claudeConfigPath + '.tmp';
+                fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2), 'utf-8');
+                fs.renameSync(tmpPath, claudeConfigPath);
+                console.log('[Pocket AI] Multi-Model Orchestrator MCP 등록 완료');
             }
             catch (err) {
                 console.error('[Pocket AI] MCP 서버 설정 등록 실패:', err.message);
@@ -345,8 +428,11 @@ export async function startSession(command = 'claude', options = {}) {
                 // PWA → Claude: 텍스트 메시지
                 if (msg.t === 'text') {
                     const text = msg.text.replace(/[\r\n]+$/, '');
-                    if (text)
+                    if (text) {
+                        // 사용자 메시지도 로컬 이력에 저장
+                        appendToHistory(sessionId, { t: 'text', text, role: 'user' });
                         bridge.sendMessage(text);
+                    }
                 }
                 // PWA → Claude: 권한 응답
                 if (msg.t === 'input-response') {
@@ -368,6 +454,43 @@ export async function startSession(command = 'claude', options = {}) {
                         bridge.sendMessage(`/model ${cmd.value}`);
                         console.log(`[Pocket AI] 모델 변경 요청: ${cmd.value}`);
                     }
+                    else if (cmd.command === 'set-workers' && Array.isArray(cmd.workers)) {
+                        try {
+                            saveWorkers(cmd.workers);
+                            console.log(`[Pocket AI] 커스텀 worker 저장: ${cmd.workers.length}개 (다음 Claude 요청부터 적용)`);
+                        }
+                        catch (err) {
+                            console.error('[Pocket AI] worker 저장 실패:', err.message);
+                        }
+                    }
+                    else if (cmd.command === 'set-builtin-workers') {
+                        const workers = cmd.workers;
+                        try {
+                            // 1. config.json에 영속화 (다음 pocket-ai 시작 시 반영)
+                            saveConfig({ builtinWorkers: {
+                                    gemini: workers.gemini !== false,
+                                    codex: workers.codex !== false,
+                                    aider: workers.aider !== false,
+                                } });
+                            // 2. 현재 실행 중인 claude.json MCP env도 즉시 업데이트
+                            const claudeConfigPath = path.join(os.homedir(), '.claude', 'claude.json');
+                            if (fs.existsSync(claudeConfigPath)) {
+                                const cfg = JSON.parse(fs.readFileSync(claudeConfigPath, 'utf-8'));
+                                if (cfg.mcpServers?.['pocket-ai-orchestrator']?.env) {
+                                    cfg.mcpServers['pocket-ai-orchestrator'].env.POCKET_AI_ENABLE_GEMINI = String(workers.gemini !== false);
+                                    cfg.mcpServers['pocket-ai-orchestrator'].env.POCKET_AI_ENABLE_CODEX = String(workers.codex !== false);
+                                    cfg.mcpServers['pocket-ai-orchestrator'].env.POCKET_AI_ENABLE_AIDER = String(workers.aider !== false);
+                                    const tmpPath = claudeConfigPath + '.tmp';
+                                    fs.writeFileSync(tmpPath, JSON.stringify(cfg, null, 2), 'utf-8');
+                                    fs.renameSync(tmpPath, claudeConfigPath);
+                                }
+                            }
+                            console.log(`[Pocket AI] 빌트인 worker 저장: gemini=${workers.gemini}, codex=${workers.codex}, aider=${workers.aider}`);
+                        }
+                        catch (err) {
+                            console.error('[Pocket AI] 빌트인 worker 설정 실패:', err.message);
+                        }
+                    }
                 }
             }));
             socket.on('session-spawn-request', (payload) => {
@@ -388,12 +511,21 @@ export async function startSession(command = 'claude', options = {}) {
             bridge.kill();
             if (socket)
                 socket.disconnect();
-            if (mcpProcess) {
-                try {
-                    process.kill(-mcpProcess.pid);
+            // Pocket AI 종료 시 MCP 오케스트레이터 등록 해제 (PWA 전용 기능 보장)
+            try {
+                const cfgPath = path.join(os.homedir(), '.claude', 'claude.json');
+                if (fs.existsSync(cfgPath)) {
+                    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+                    if (cfg.mcpServers?.['pocket-ai-orchestrator']) {
+                        delete cfg.mcpServers['pocket-ai-orchestrator'];
+                        // 원자적 쓰기: race condition 방지
+                        const tmpPath = cfgPath + '.tmp';
+                        fs.writeFileSync(tmpPath, JSON.stringify(cfg, null, 2), 'utf-8');
+                        fs.renameSync(tmpPath, cfgPath);
+                    }
                 }
-                catch { }
             }
+            catch { }
             process.exit(0);
         };
         process.on('SIGINT', cleanup);

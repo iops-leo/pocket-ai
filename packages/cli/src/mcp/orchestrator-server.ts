@@ -5,84 +5,189 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { spawn } from "child_process";
 import fs from "fs";
-import path from "path";
 import os from "os";
+import path from "path";
 
-// Helper to run a command and capture its output
-const runModelCli = (engine: 'codex' | 'gemini', prompt: string): Promise<string> => {
+// 세션 cwd: start.ts가 MCP 등록 시 env로 주입
+const SESSION_CWD = process.env.POCKET_AI_CWD || process.cwd();
+
+// 커스텀 worker 설정 파일 경로
+const WORKERS_FILE = path.join(os.homedir(), '.config', 'pocket-ai', 'workers.json');
+
+interface CustomWorker {
+    name: string;        // 툴 이름 (ask_<name>)
+    binary: string;      // 실행 명령어 (e.g. "goose run")
+    description: string; // Claude가 언제 쓸지 판단하는 설명
+}
+
+function loadCustomWorkers(): CustomWorker[] {
+    try {
+        if (!fs.existsSync(WORKERS_FILE)) return [];
+        const parsed = JSON.parse(fs.readFileSync(WORKERS_FILE, 'utf-8'));
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((w: any) =>
+            typeof w.name === 'string' && w.name &&
+            typeof w.binary === 'string' && w.binary &&
+            typeof w.description === 'string' && w.description
+        );
+    } catch { return []; }
+}
+
+// ── 유틸 ─────────────────────────────────────────────────────
+
+function stripAnsi(input: string): string {
+    // 버그 수정: \\x1B → \x1B (실제 이스케이프 문자 매칭)
+    return input.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    const timer = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)
+    );
+    return Promise.race([promise, timer]);
+}
+
+// ── Gemini: -p/--prompt 헤드리스 모드 (기존 OAuth 인증 재사용) ──
+
+function callGemini(prompt: string): Promise<string> {
     return new Promise((resolve, reject) => {
-        // Create a temporary file to hold the prompt to avoid shell escaping issues
-        const tmpFile = path.join(os.tmpdir(), `pocket-ai-${engine}-req-${Date.now()}.txt`);
-        fs.writeFileSync(tmpFile, prompt, 'utf-8');
-
-        // Note: we assume pocket-ai is globally installed or linkable, but since this runs inside 
-        // the pocket-ai context, we'll invoke the underlying CLI directly if possible.
-        // For simplicity, we can spawn "pocket-ai" start [engine] --headless and pass it the prompt via stdin.
-        // Wait, pocket-ai CLI is exactly what we are building. 
-        // A safer way is to just use the raw CLI (aider or gemini) because we want a single-shot query, not a session.
-        // However, we can just use our own pocket-ai start --headless and send the text, then wait for exit.
-
-        // Actually, for Codex, we can run `aider --message-file <tmpFile>`.
-        // For Gemini, we might need a custom script or just rely on a built-in single-shot mode if it exists.
-        // Let's use `pocket-ai start <engine> --headless` as a generic approach?
-        // Wait, Pocket-AI daemon expects a websocket connection if we use `start`.
-        // To keep it simple and stateless for the MCP tool, let's spawn `aider` or `gemini` directly if available.
-        // Better yet, we can spawn `npx aider --message-file <tmpFile>` and `npx gemini ...` (or whatever the gemini CLI is).
-
-        // Let's look at how Pocket AI spawns them in start.ts: 
-        // it uses `node-pty` to spawn the binary (e.g., 'codex' or 'gemini').
-        const child = spawn(engine, [], {
-            stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env, AIDER_NO_AUTO_COMMITS: '1' }
+        // gemini -p "..." : non-interactive(headless) 모드, 로컬 OAuth 인증 재사용
+        const child = spawn('gemini', ['-p', prompt, '--yolo'], {
+            cwd: SESSION_CWD,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: { ...process.env },
         });
 
         let output = '';
-        let errorOutput = '';
+        child.stdout.on('data', (d: Buffer) => output += d.toString());
+        child.stderr.on('data', (d: Buffer) => output += d.toString());
 
-        child.stdout.on('data', (data) => output += data.toString());
-        child.stderr.on('data', (data) => errorOutput += data.toString());
-
-        child.on('error', (err) => {
-            reject(new Error(`Failed to start ${engine}: ${err.message}`));
-        });
-
-        // For aider/codex, just write the prompt and wait for it to finish.
-        // Actually Aider might stay open waiting for more input. We should send /exit after the prompt.
-        if (engine === 'codex') {
-            child.stdin.write(prompt + '\n/exit\n');
-        } else {
-            child.stdin.write(prompt + '\n');
-            child.stdin.end();
-        }
-
-        child.on('close', (code) => {
-            try { fs.unlinkSync(tmpFile); } catch { }
-            if (code !== 0 && !output.trim()) {
-                reject(new Error(`${engine} failed (code ${code}): ${errorOutput}`));
+        child.on('error', (err: Error) =>
+            reject(new Error(`gemini 실행 실패: ${err.message}. 설치 여부 확인: npm install -g @google/gemini-cli`))
+        );
+        child.on('close', (code: number | null) => {
+            const cleaned = stripAnsi(output).trim();
+            if (code !== 0 && !cleaned) {
+                reject(new Error(`gemini 비정상 종료 (code ${code}): ${output.slice(0, 200)}`));
             } else {
-                resolve(stripAnsi(output));
+                resolve(cleaned);
             }
         });
     });
-};
-
-function stripAnsi(input: string): string {
-    return input.replace(/\\x1B\\[[0-?]*[ -/]*[@-~]/g, '');
 }
+
+// ── Aider: 멀티모델 코드 편집 (100+ 모델 지원, git-native) ──
+
+function callAider(prompt: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const child = spawn('aider', [
+            '--message', prompt,
+            '--yes-always',      // 확인 프롬프트 자동 승인
+            '--no-auto-commits', // Git 자동 커밋 방지
+            '--no-pretty',       // ANSI 색상/포맷 비활성화
+        ], {
+            cwd: SESSION_CWD,
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: { ...process.env },
+        });
+
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (d: Buffer) => stdout += d.toString());
+        child.stderr.on('data', (d: Buffer) => stderr += d.toString());
+
+        child.on('error', (err: Error) => reject(new Error(`aider 실행 실패: ${err.message}. 설치 여부 확인: pip install aider-chat`)));
+        child.on('close', (code: number | null) => {
+            const result = stripAnsi(stdout).trim();
+            if (code !== 0 && !result) {
+                reject(new Error(`aider가 비정상 종료되었습니다 (code ${code}): ${stderr.slice(0, 200)}`));
+            } else {
+                resolve(result || stripAnsi(stderr).trim());
+            }
+        });
+
+        child.stdin.end();
+    });
+}
+
+// ── 커스텀 Worker: 사용자 정의 CLI 에이전트 ────────────────────
+
+function callCustomWorker(binary: string, prompt: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const parts = binary.trim().split(/\s+/);
+        const cmd = parts[0];
+        const extraArgs = parts.slice(1);
+        const child = spawn(cmd, [...extraArgs, prompt], {
+            cwd: SESSION_CWD,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: { ...process.env },
+        });
+
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (d: Buffer) => stdout += d.toString());
+        child.stderr.on('data', (d: Buffer) => stderr += d.toString());
+
+        child.on('error', (err: Error) =>
+            reject(new Error(`${binary} 실행 실패: ${err.message}`))
+        );
+        child.on('close', (code: number | null) => {
+            const result = stripAnsi(stdout).trim();
+            if (code !== 0 && !result) {
+                reject(new Error(`${binary} 비정상 종료 (code ${code}): ${stderr.slice(0, 200)}`));
+            } else {
+                resolve(result || stripAnsi(stderr).trim());
+            }
+        });
+    });
+}
+
+// ── OpenAI Codex CLI: GPT 기반 코드 편집 ─────────────────────
+
+function callCodex(prompt: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+        // codex <prompt> --approval-mode auto-edit --quiet : 비대화형 모드
+        const child = spawn('codex', [
+            prompt,
+            '--approval-mode', 'auto-edit', // 파일 편집 자동 승인
+            '--quiet',                       // 불필요한 출력 제거
+        ], {
+            cwd: SESSION_CWD,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: { ...process.env },
+        });
+
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (d: Buffer) => stdout += d.toString());
+        child.stderr.on('data', (d: Buffer) => stderr += d.toString());
+
+        child.on('error', (err: Error) =>
+            reject(new Error(`codex 실행 실패: ${err.message}. 설치 여부 확인: npm install -g @openai/codex`))
+        );
+        child.on('close', (code: number | null) => {
+            const result = stripAnsi(stdout).trim();
+            if (code !== 0 && !result) {
+                reject(new Error(`codex가 비정상 종료되었습니다 (code ${code}): ${stderr.slice(0, 200)}`));
+            } else {
+                resolve(result || stripAnsi(stderr).trim());
+            }
+        });
+    });
+}
+
+// ── MCP 서버 정의 ─────────────────────────────────────────────
 
 const server = new Server({
     name: "pocket-ai-orchestrator",
     version: "1.0.0"
 }, {
-    capabilities: {
-        tools: {}
-    }
+    capabilities: { tools: {} }
 });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools: any[] = [];
 
-    // UI에서 사용자가 제미나이 구독/연동을 활성화한 경우에만 노출 (기본값: 허용)
     if (process.env.POCKET_AI_ENABLE_GEMINI !== 'false') {
         tools.push({
             name: "ask_gemini",
@@ -97,15 +202,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         });
     }
 
-    // UI에서 사용자가 코덱스 구독/연동을 활성화한 경우에만 노출 (기본값: 허용)
-    if (process.env.POCKET_AI_ENABLE_CODEX !== 'false') {
+    if (process.env.POCKET_AI_ENABLE_AIDER !== 'false') {
         tools.push({
-            name: "ask_codex",
-            description: "Ask Codex (Aider) a coding question or instruct it to modify files. Highly specialized in code editing and repository context.",
+            name: "ask_aider",
+            description: "Ask Aider to edit code files in the current project. Aider is git-native and supports 100+ models (Claude, GPT, Gemini, Ollama). Best for multi-file refactoring, incremental edits, and tasks that benefit from git diff visibility.",
             inputSchema: {
                 type: "object",
                 properties: {
-                    prompt: { type: "string", description: "The coding prompt or instruction for Codex" }
+                    prompt: { type: "string", description: "The coding instruction for Aider" }
+                },
+                required: ["prompt"]
+            }
+        });
+    }
+
+    if (process.env.POCKET_AI_ENABLE_CODEX !== 'false') {
+        tools.push({
+            name: "ask_codex",
+            description: "Ask OpenAI Codex CLI to edit code files. Powered by GPT-5.2-Codex. Best for complex refactors, migrations, and tasks that benefit from GPT's code generation strengths. Requires OPENAI_API_KEY.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    prompt: { type: "string", description: "The coding instruction for Codex" }
+                },
+                required: ["prompt"]
+            }
+        });
+    }
+
+    // 커스텀 worker 동적 등록 (workers.json 실시간 반영)
+    for (const worker of loadCustomWorkers()) {
+        tools.push({
+            name: `ask_${worker.name}`,
+            description: worker.description,
+            inputSchema: {
+                type: "object",
+                properties: {
+                    prompt: { type: "string", description: `The instruction for ${worker.name}` }
                 },
                 required: ["prompt"]
             }
@@ -117,41 +250,64 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+    const prompt = typeof args?.prompt === 'string' ? args.prompt : '';
 
-    if (name === "ask_gemini" || name === "ask_codex") {
-        const engine = name === "ask_gemini" ? "gemini" : "codex";
+    if (!prompt) throw new Error("Missing 'prompt' argument");
 
-        // 구독/연동 비활성화 체크
-        if (engine === 'gemini' && process.env.POCKET_AI_ENABLE_GEMINI === 'false') {
+    if (name === "ask_gemini") {
+        if (process.env.POCKET_AI_ENABLE_GEMINI === 'false') {
             return {
-                content: [{ type: "text", text: "Error: Gemini orchestration is disabled. Please subscribe or enable it in your Pocket AI settings." }],
+                content: [{ type: "text", text: "Error: Gemini orchestration is disabled in Pocket AI settings." }],
                 isError: true
             };
         }
-        if (engine === 'codex' && process.env.POCKET_AI_ENABLE_CODEX === 'false') {
-            return {
-                content: [{ type: "text", text: "Error: Codex orchestration is disabled. Please subscribe or enable it in your Pocket AI settings." }],
-                isError: true
-            };
-        }
-
-        const prompt = typeof args?.prompt === 'string' ? args.prompt : '';
-
-        if (!prompt) {
-            throw new Error("Missing 'prompt' argument");
-        }
-
         try {
-            const result = await runModelCli(engine, prompt);
-            return {
-                content: [{ type: "text", text: result }],
-                isError: false
-            };
+            const result = await withTimeout(callGemini(prompt), 60_000, 'Gemini');
+            return { content: [{ type: "text", text: result }], isError: false };
         } catch (err: any) {
+            return { content: [{ type: "text", text: `Gemini 오류: ${err.message}` }], isError: true };
+        }
+    }
+
+    if (name === "ask_aider") {
+        if (process.env.POCKET_AI_ENABLE_AIDER === 'false') {
             return {
-                content: [{ type: "text", text: `Error calling ${engine}: ${err.message}` }],
+                content: [{ type: "text", text: "Error: Aider orchestration is disabled in Pocket AI settings." }],
                 isError: true
             };
+        }
+        try {
+            const result = await withTimeout(callAider(prompt), 120_000, 'Aider');
+            return { content: [{ type: "text", text: result }], isError: false };
+        } catch (err: any) {
+            return { content: [{ type: "text", text: `Aider 오류: ${err.message}` }], isError: true };
+        }
+    }
+
+    if (name === "ask_codex") {
+        if (process.env.POCKET_AI_ENABLE_CODEX === 'false') {
+            return {
+                content: [{ type: "text", text: "Error: Codex orchestration is disabled in Pocket AI settings." }],
+                isError: true
+            };
+        }
+        try {
+            const result = await withTimeout(callCodex(prompt), 120_000, 'Codex');
+            return { content: [{ type: "text", text: result }], isError: false };
+        } catch (err: any) {
+            return { content: [{ type: "text", text: `Codex 오류: ${err.message}` }], isError: true };
+        }
+    }
+
+    // 커스텀 worker 처리
+    const customWorkers = loadCustomWorkers();
+    const customWorker = customWorkers.find(w => `ask_${w.name}` === name);
+    if (customWorker) {
+        try {
+            const result = await withTimeout(callCustomWorker(customWorker.binary, prompt), 120_000, customWorker.name);
+            return { content: [{ type: "text", text: result }], isError: false };
+        } catch (err: any) {
+            return { content: [{ type: "text", text: `${customWorker.name} 오류: ${err.message}` }], isError: true };
         }
     }
 
@@ -161,7 +317,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("Pocket AI Orchestrator MCP Server running on stdio");
+    console.error(`[Pocket AI Orchestrator] MCP 서버 시작됨 (cwd: ${SESSION_CWD})`);
 }
 
 main().catch(err => {

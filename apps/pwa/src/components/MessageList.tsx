@@ -2,11 +2,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Copy, Check, ArrowDown, Zap, ShieldCheck, ShieldX, ShieldQuestion } from 'lucide-react';
 import { ToolCard } from './ToolCard';
+import { OrchestratorWorkerCard } from './OrchestratorWorkerCard';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { useTranslations } from 'next-intl';
 
 type TextMsg = { kind: 'text'; id: string; content: string; role: 'user' | 'assistant'; timestamp?: number };
-type ToolMsg = { kind: 'tool'; id: string; name: string; args: string; output?: string; status: 'running' | 'done' | 'error'; error?: string };
+type ToolMsg = { kind: 'tool'; id: string; name: string; args: string; output?: string; status: 'running' | 'done' | 'error'; error?: string; startTime?: number };
 type PermissionMsg = {
     kind: 'permission';
     id: string;
@@ -244,6 +245,19 @@ export function MessageList({ messages, isAiThinking, onOptionSelect, onPermissi
                                     key={msg.id}
                                     msg={msg}
                                     onResponse={onPermissionResponse}
+                                />
+                            );
+                        }
+                        // ask_* 툴은 오케스트레이터 Worker 전용 카드로 렌더링
+                        if (msg.name.startsWith('ask_')) {
+                            return (
+                                <OrchestratorWorkerCard
+                                    key={msg.id}
+                                    name={msg.name}
+                                    args={msg.args}
+                                    output={msg.output}
+                                    status={msg.status}
+                                    startTime={msg.startTime}
                                 />
                             );
                         }
