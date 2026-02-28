@@ -707,9 +707,10 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                         />
                     )}
 
-                    {/* 입력창 */}
-                    <div className="max-w-3xl mx-auto w-full px-3 pt-3 flex items-center gap-2" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
-                        <div className="flex-1 bg-gray-900 border border-gray-700/60 rounded-2xl flex items-center px-4 py-2 shadow-xl transition-all focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/30">
+                    {/* 입력창 — Claude Code 스타일 2행 컨테이너 */}
+                    <div className="max-w-3xl mx-auto w-full px-3 pt-2.5" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+                        <div className="bg-gray-900 border border-gray-700/60 rounded-2xl shadow-xl transition-all focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/30 flex flex-col">
+                            {/* 1행: 텍스트 입력 */}
                             <textarea
                                 ref={textareaRef}
                                 rows={1}
@@ -718,7 +719,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                                     const val = e.target.value;
                                     setInputValue(val);
                                     adjustTextareaHeight();
-                                    // "/" 로 시작하면 드롭다운 표시
                                     if (val.startsWith('/') && slashCommands.length > 0) {
                                         setShowSlashDropdown(true);
                                     } else {
@@ -727,37 +727,38 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                                 }}
                                 onKeyDown={handleKeyDown}
                                 placeholder={t('inputPlaceholder')}
-                                className="flex-1 bg-transparent text-gray-100 placeholder-gray-500 outline-none resize-none text-[16px] leading-relaxed py-1 min-h-[26px] max-h-40 overflow-y-auto"
+                                className="bg-transparent text-gray-100 placeholder-gray-500 outline-none resize-none text-[16px] leading-relaxed px-4 pt-3 pb-2 min-h-[26px] max-h-40 overflow-y-auto w-full"
                                 autoComplete="off"
                                 style={{ height: 'auto' }}
                             />
+                            {/* 2행: 툴바 */}
+                            <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-gray-800/60">
+                                {/* 왼쪽: 중단 버튼 or 힌트 */}
+                                {isAiThinking ? (
+                                    <button
+                                        type="button"
+                                        onClick={handleInterrupt}
+                                        className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-full transition-colors"
+                                    >
+                                        <span className="w-2 h-2 rounded-sm bg-red-400 inline-block flex-shrink-0" />
+                                        {t('stopGeneration')}
+                                    </button>
+                                ) : (
+                                    <p className="text-[10px] text-gray-700 font-mono select-none">
+                                        <kbd>Shift+Enter</kbd> 줄바꿈
+                                    </p>
+                                )}
+                                {/* 오른쪽: 전송 버튼 */}
+                                <button
+                                    type="button"
+                                    onClick={() => handleSend()}
+                                    disabled={!inputValue.trim() || isDisconnected || isAiThinking}
+                                    className="flex-shrink-0 w-8 h-8 flex justify-center items-center bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-full transition-all active:scale-90"
+                                >
+                                    <ArrowUp size={16} strokeWidth={2.5} />
+                                </button>
+                            </div>
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => handleSend()}
-                            disabled={!inputValue.trim() || isDisconnected}
-                            className="flex-shrink-0 w-10 h-10 flex justify-center items-center bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-full transition-all active:scale-90 shadow-lg"
-                        >
-                            <ArrowUp size={18} strokeWidth={2.5} />
-                        </button>
-                    </div>
-
-                    {/* 하단 힌트 / 중단 버튼 */}
-                    <div className="max-w-3xl mx-auto flex items-center justify-center pb-2 gap-3">
-                        {isAiThinking ? (
-                            <button
-                                type="button"
-                                onClick={handleInterrupt}
-                                className="flex items-center gap-1.5 px-3 py-1 text-[11px] text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-full transition-colors"
-                            >
-                                <span className="w-2 h-2 rounded-sm bg-red-400 inline-block" />
-                                {t('stopGeneration')}
-                            </button>
-                        ) : (
-                            <p className="text-[10px] text-gray-700">
-                                <kbd className="font-mono">Shift+Enter</kbd> 줄바꿈 · <kbd className="font-mono">Enter</kbd> 전송
-                            </p>
-                        )}
                     </div>
                 </div>
             </main>
