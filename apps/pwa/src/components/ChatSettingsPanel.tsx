@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Shield, Cpu, Boxes, Plus, Trash2 } from 'lucide-react';
+import { X, Shield, Cpu, Boxes, Plus, Trash2, SlidersHorizontal, Network } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -31,6 +31,8 @@ interface ChatSettingsPanelProps {
     onSettingsChange: (settings: ChatSettings) => void;
     onClose: () => void;
     isClaudeEngine: boolean;
+    activeTab: 'session' | 'workers';
+    onTabChange: (tab: 'session' | 'workers') => void;
 }
 
 interface OptionItem<T> {
@@ -61,7 +63,7 @@ const MODEL_OPTIONS: OptionItem<ModelSetting>[] = [
     { id: 'opus', labelKey: 'modelOpus', descKey: 'modelOpusDesc', badge: 'Opus', badgeColor: 'text-orange-400 bg-orange-500/10 border-orange-500/30' },
 ];
 
-export function ChatSettingsPanel({ settings, onSettingsChange, onClose, isClaudeEngine }: ChatSettingsPanelProps) {
+export function ChatSettingsPanel({ settings, onSettingsChange, onClose, isClaudeEngine, activeTab, onTabChange }: ChatSettingsPanelProps) {
     const t = useTranslations('chatSettings');
     const [showAddForm, setShowAddForm] = useState(false);
     const [newWorker, setNewWorker] = useState({ name: '', binary: '', description: '' });
@@ -140,61 +142,84 @@ export function ChatSettingsPanel({ settings, onSettingsChange, onClose, isClaud
 
             {/* 패널 */}
             <div className="relative z-10 w-full max-w-xs bg-gray-900 border-l border-gray-800 h-full overflow-y-auto shadow-2xl flex flex-col">
-                {/* 헤더 */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 flex-shrink-0">
-                    <h3 className="text-sm font-semibold text-white">{t('title')}</h3>
+                {/* 헤더: 탭 + 닫기 */}
+                <div className="flex items-center border-b border-gray-800 flex-shrink-0">
+                    <button
+                        onClick={() => onTabChange('session')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                            activeTab === 'session'
+                                ? 'border-blue-500 text-white'
+                                : 'border-transparent text-gray-500 hover:text-gray-300'
+                        }`}
+                    >
+                        <SlidersHorizontal size={12} />
+                        {t('tabSession')}
+                    </button>
+                    <button
+                        onClick={() => onTabChange('workers')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                            activeTab === 'workers'
+                                ? 'border-blue-500 text-white'
+                                : 'border-transparent text-gray-500 hover:text-gray-300'
+                        }`}
+                    >
+                        <Network size={12} />
+                        {t('tabWorkers')}
+                    </button>
                     <button
                         onClick={onClose}
-                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                        className="px-3 py-3 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors flex-shrink-0"
                     >
-                        <X size={16} />
+                        <X size={15} />
                     </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                    {/* 퍼미션 모드 */}
-                    <section>
-                        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                            <Shield size={12} />
-                            {t('permissionMode')}
-                        </h4>
-                        <div className="space-y-2">
-                            {renderOptions(
-                                PERMISSION_MODES,
-                                settings.permissionMode,
-                                (val) => onSettingsChange({ ...settings, permissionMode: val }),
-                                !isClaudeEngine,
-                            )}
-                        </div>
-                        {!isClaudeEngine && (
-                            <p className="text-[11px] text-gray-600 mt-2">{t('claudeOnly')}</p>
-                        )}
-                    </section>
+                    {/* 세션 탭: 퍼미션 모드 + 모델 */}
+                    {activeTab === 'session' && (
+                        <>
+                            <section>
+                                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                    <Shield size={12} />
+                                    {t('permissionMode')}
+                                </h4>
+                                <div className="space-y-2">
+                                    {renderOptions(
+                                        PERMISSION_MODES,
+                                        settings.permissionMode,
+                                        (val) => onSettingsChange({ ...settings, permissionMode: val }),
+                                        !isClaudeEngine,
+                                    )}
+                                </div>
+                                {!isClaudeEngine && (
+                                    <p className="text-[11px] text-gray-600 mt-2">{t('claudeOnly')}</p>
+                                )}
+                            </section>
+                            <section>
+                                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                    <Cpu size={12} />
+                                    {t('model')}
+                                </h4>
+                                <div className="space-y-2">
+                                    {renderOptions(
+                                        MODEL_OPTIONS,
+                                        settings.model,
+                                        (val) => onSettingsChange({ ...settings, model: val }),
+                                        !isClaudeEngine,
+                                    )}
+                                </div>
+                                {!isClaudeEngine && (
+                                    <p className="text-[11px] text-gray-600 mt-2">{t('claudeOnly')}</p>
+                                )}
+                                {isClaudeEngine && (
+                                    <p className="text-[11px] text-gray-600 mt-2">{t('modelNote')}</p>
+                                )}
+                            </section>
+                        </>
+                    )}
 
-                    {/* 모델 선택 */}
-                    <section>
-                        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                            <Cpu size={12} />
-                            {t('model')}
-                        </h4>
-                        <div className="space-y-2">
-                            {renderOptions(
-                                MODEL_OPTIONS,
-                                settings.model,
-                                (val) => onSettingsChange({ ...settings, model: val }),
-                                !isClaudeEngine,
-                            )}
-                        </div>
-                        {!isClaudeEngine && (
-                            <p className="text-[11px] text-gray-600 mt-2">{t('claudeOnly')}</p>
-                        )}
-                        {isClaudeEngine && (
-                            <p className="text-[11px] text-gray-600 mt-2">{t('modelNote')}</p>
-                        )}
-                    </section>
-
-                    {/* 커스텀 오케스트레이션 Worker */}
-                    <section>
+                    {/* Workers 탭 */}
+                    {activeTab === 'workers' && <section>
                         <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                             <Boxes size={12} />
                             {t('customWorkers')}
@@ -314,7 +339,7 @@ export function ChatSettingsPanel({ settings, onSettingsChange, onClose, isClaud
                                 <p className="text-[11px] text-gray-600">{t('workerHint')}</p>
                             </div>
                         )}
-                    </section>
+                    </section>}
                 </div>
             </div>
         </div>

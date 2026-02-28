@@ -196,7 +196,9 @@
     "workerAdd": "Add",
     "workerCancel": "Cancel",
     "workerAddNew": "Add Worker",
-    "workerHint": "More specific descriptions help Claude delegate more accurately"
+    "workerHint": "More specific descriptions help Claude delegate more accurately",
+    "tabSession": "Session",
+    "tabWorkers": "Workers"
   },
   "sessionDetails": {
     "title": "Session Details",

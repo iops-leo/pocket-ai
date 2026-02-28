@@ -196,7 +196,9 @@
     "workerAdd": "추가",
     "workerCancel": "취소",
     "workerAddNew": "Worker 추가",
-    "workerHint": "설명을 구체적으로 쓸수록 Claude가 더 정확히 위임합니다"
+    "workerHint": "설명을 구체적으로 쓸수록 Claude가 더 정확히 위임합니다",
+    "tabSession": "세션",
+    "tabWorkers": "Workers"
   },
   "sessionDetails": {
     "title": "세션 상세 정보",

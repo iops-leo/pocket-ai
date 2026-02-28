@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, History, ArrowUp, Settings } from 'lucide-react';
+import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, History, ArrowUp, SlidersHorizontal, Network } from 'lucide-react';
 import { ChatSettingsPanel, type ChatSettings } from './ChatSettingsPanel';
 import { SlashCommandDropdown, type SlashCommand } from './SlashCommandDropdown';
 import { io, Socket } from 'socket.io-client';
@@ -34,7 +34,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const [isAiThinking, setIsAiThinking] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [systemError, setSystemError] = useState<string | null>(null);
-    const [showChatSettings, setShowChatSettings] = useState(false);
+    const [chatSettingsTab, setChatSettingsTab] = useState<'session' | 'workers' | null>(null);
     const [chatSettings, setChatSettings] = useState<ChatSettings>({ permissionMode: 'default', model: 'default', customWorkers: [], builtinWorkers: { gemini: true, codex: true, aider: true } });
 
     // 슬래시 명령어
@@ -559,13 +559,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                             <ClipboardPaste size={15} />
                         </button>
                     )}
-                    <button
-                        onClick={() => setShowChatSettings(prev => !prev)}
-                        className={`p-2 rounded-lg transition-colors border ${showChatSettings ? 'text-blue-400 bg-blue-500/10 border-blue-500/30' : 'text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-700 border-gray-700/50'}`}
-                        title="Settings"
-                    >
-                        <Settings size={15} />
-                    </button>
                 </div>
             </header>
 
@@ -585,12 +578,14 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
             {/* Main chat area */}
             <main className="flex-1 relative w-full min-h-0 bg-gray-950 flex flex-col">
-                {showChatSettings && (
+                {chatSettingsTab !== null && (
                     <ChatSettingsPanel
                         settings={chatSettings}
                         onSettingsChange={handleSettingsChange}
-                        onClose={() => setShowChatSettings(false)}
+                        onClose={() => setChatSettingsTab(null)}
                         isClaudeEngine={sessionMeta.engine === 'claude' || !sessionMeta.engine}
+                        activeTab={chatSettingsTab}
+                        onTabChange={(tab) => setChatSettingsTab(tab)}
                     />
                 )}
                 {/* 연결 중 오버레이 */}
@@ -691,6 +686,25 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                                         <kbd>Shift+Enter</kbd> 줄바꿈
                                     </p>
                                 )}
+                                {/* 가운데: 설정 아이콘 */}
+                                <div className="flex items-center gap-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => setChatSettingsTab(prev => prev === 'session' ? null : 'session')}
+                                        className={`p-1.5 rounded-lg transition-colors ${chatSettingsTab === 'session' ? 'text-blue-400 bg-blue-500/10' : 'text-gray-600 hover:text-gray-300 hover:bg-gray-800/50'}`}
+                                        title="Permission & Model"
+                                    >
+                                        <SlidersHorizontal size={14} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setChatSettingsTab(prev => prev === 'workers' ? null : 'workers')}
+                                        className={`p-1.5 rounded-lg transition-colors ${chatSettingsTab === 'workers' ? 'text-blue-400 bg-blue-500/10' : 'text-gray-600 hover:text-gray-300 hover:bg-gray-800/50'}`}
+                                        title="Orchestration Workers"
+                                    >
+                                        <Network size={14} />
+                                    </button>
+                                </div>
                                 {/* 오른쪽: 전송 버튼 */}
                                 <button
                                     type="button"
