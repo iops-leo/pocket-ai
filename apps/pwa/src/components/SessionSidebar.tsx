@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { Search, Plus, ChevronLeft, FolderOpen, Settings, Trash2, Pencil, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { Search, Plus, ChevronLeft, FolderOpen, Settings, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
@@ -22,8 +22,6 @@ interface SessionSidebarProps {
     sessions: Session[];
     activeSessionId: string | null;
     onSelectSession: (sessionId: string) => void;
-    onDeleteSession: (sessionId: string) => void;
-    onRenameSession: (sessionId: string, sessionName: string) => void;
     onNewSession: () => void;
     onRefresh?: () => void;
     isCollapsed?: boolean;
@@ -58,8 +56,6 @@ export function SessionSidebar({
     sessions,
     activeSessionId,
     onSelectSession,
-    onDeleteSession,
-    onRenameSession,
     onNewSession,
     onRefresh,
     isCollapsed = false,
@@ -229,8 +225,6 @@ export function SessionSidebar({
                                 session={session}
                                 isActive={activeSessionId === session.sessionId}
                                 onClick={() => onSelectSession(session.sessionId)}
-                                onDelete={() => onDeleteSession(session.sessionId)}
-                                onRename={(name) => onRenameSession(session.sessionId, name)}
                             />
                         ))}
                     </div>
@@ -249,9 +243,6 @@ export function SessionSidebar({
                                 session={session}
                                 isActive={activeSessionId === session.sessionId}
                                 onClick={() => onSelectSession(session.sessionId)}
-                                onDelete={() => onDeleteSession(session.sessionId)}
-                                onRename={(name) => onRenameSession(session.sessionId, name)}
-                                disabled
                             />
                         ))}
                     </div>
@@ -295,40 +286,24 @@ function SessionItem({
     session,
     isActive,
     onClick,
-    onDelete,
-    onRename,
-    disabled = false,
 }: {
     session: Session;
     isActive: boolean;
     onClick: () => void;
-    onDelete: () => void;
-    onRename: (name: string) => void;
-    disabled?: boolean;
 }) {
-    const t = useTranslations('dashboard');
-    const [showConfirm, setShowConfirm] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
-    const [editValue, setEditValue] = useState('');
-    const editInputRef = useRef<HTMLInputElement>(null);
     const isOnline = session.status === 'online';
     const shortPath = getShortPath(session.metadata?.cwd);
     const displayName = session.metadata?.sessionName || session.metadata?.hostname || 'Unknown Host';
 
-    useEffect(() => {
-        if (isEditing) editInputRef.current?.focus();
-    }, [isEditing]);
-
     return (
-        <div className="relative group">
+        <div className="relative">
             <button
                 onClick={onClick}
-                disabled={disabled}
                 className={`w-full px-3 py-2.5 flex items-start gap-3 rounded-xl transition-all duration-200 outline-none ${isActive
                     ? 'bg-blue-500/10 ring-1 ring-blue-500/30 text-white'
-                    : disabled
-                        ? 'opacity-40 cursor-not-allowed text-gray-400'
-                        : 'hover:bg-gray-800/60 text-gray-300 hover:text-white border border-transparent'
+                    : isOnline
+                        ? 'hover:bg-gray-800/60 text-gray-300 hover:text-white border border-transparent'
+                        : 'opacity-60 hover:opacity-80 hover:bg-gray-800/40 text-gray-400 border border-transparent'
                     }`}
             >
                 {/* Status indicator */}
@@ -339,31 +314,9 @@ function SessionItem({
                 {/* Content */}
                 <div className="flex-1 min-w-0 text-left">
                     <div className="flex items-center gap-2">
-                        {isEditing ? (
-                            <input
-                                ref={editInputRef}
-                                type="text"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        const trimmed = editValue.trim();
-                                        if (trimmed && trimmed !== displayName) onRename(trimmed);
-                                        setIsEditing(false);
-                                    } else if (e.key === 'Escape') {
-                                        setIsEditing(false);
-                                    }
-                                }}
-                                onBlur={() => setIsEditing(false)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="bg-gray-950 text-white text-sm font-semibold rounded-md px-2 py-0.5 w-full border border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/50 shadow-inner"
-                            />
-                        ) : (
-                            <span className="font-semibold text-[13px] truncate tracking-wide">
-                                {displayName}
-                            </span>
-                        )}
+                        <span className="font-semibold text-[13px] truncate tracking-wide">
+                            {displayName}
+                        </span>
                         <span
                             className={`px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase rounded-md border flex-shrink-0 ${getEngineBadgeClass(session.metadata?.engine)}`}
                             title={`Engine: ${getEngineLabel(session.metadata?.engine)}`}
@@ -383,62 +336,7 @@ function SessionItem({
                         {session.sessionId.slice(0, 8)}
                     </div>
                 </div>
-
-                {/* Actions (Rename / Delete) */}
-                {!showConfirm && (
-                    <div className="flex-shrink-0 flex items-center gap-0.5 opacity-50 md:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity self-center ml-1">
-                        <span
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setEditValue(displayName);
-                                setIsEditing(true);
-                            }}
-                            className="p-2 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                            title={t('renameSession')}
-                        >
-                            <Pencil size={14} />
-                        </span>
-                        <span
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowConfirm(true);
-                            }}
-                            className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                            title={t('deleteSession')}
-                        >
-                            <Trash2 size={14} />
-                        </span>
-                    </div>
-                )}
             </button>
-
-            {/* Delete confirmation */}
-            {showConfirm && (
-                <div className="absolute inset-0 bg-gray-950/95 backdrop-blur-sm rounded-xl flex items-center justify-between gap-2 px-4 shadow-[0_0_15px_rgba(0,0,0,0.5)] z-10 border border-red-900/50">
-                    <span className="text-xs font-medium text-gray-200 truncate">{t('deleteSessionConfirm')}</span>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowConfirm(false);
-                            }}
-                            className="px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg font-medium transition-colors"
-                        >
-                            {t('cancel')}
-                        </button>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowConfirm(false);
-                                onDelete();
-                            }}
-                            className="px-3 py-1.5 text-xs bg-red-600/90 hover:bg-red-500 text-white rounded-lg font-medium shadow-sm transition-colors"
-                        >
-                            {t('deleteSession')}
-                        </button>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, History, ArrowUp, SlidersHorizontal, Network } from 'lucide-react';
+import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, History, ArrowUp, SlidersHorizontal, Network, Pencil, Trash2 } from 'lucide-react';
 import { ChatSettingsPanel, type ChatSettings } from './ChatSettingsPanel';
 import { SlashCommandDropdown, type SlashCommand } from './SlashCommandDropdown';
 import { io, Socket } from 'socket.io-client';
@@ -13,6 +13,8 @@ interface TerminalChatProps {
     sessionId: string;
     onBack: () => void;
     embedded?: boolean;
+    onRenameSession?: (name: string) => void;
+    onDeleteSession?: () => void;
 }
 
 type SessionMeta = {
@@ -24,7 +26,7 @@ type SessionMeta = {
 
 const sessionUiCache = new Map<string, { messages: ChatMessage[]; sessionMeta: SessionMeta }>();
 
-export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalChatProps) {
+export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSession, onDeleteSession }: TerminalChatProps) {
     const t = useTranslations('chat');
     const [isConnecting, setIsConnecting] = useState(true);
     const [isDisconnected, setIsDisconnected] = useState(false);
@@ -36,6 +38,12 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const [systemError, setSystemError] = useState<string | null>(null);
     const [chatSettingsTab, setChatSettingsTab] = useState<'session' | 'workers' | null>(null);
     const [chatSettings, setChatSettings] = useState<ChatSettings>({ permissionMode: 'default', model: 'default', customWorkers: [], builtinWorkers: { gemini: true, codex: true, aider: true } });
+
+    // 새 상태
+    const [thinkingSeconds, setThinkingSeconds] = useState(0);
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [renameValue, setRenameValue] = useState('');
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     // 슬래시 명령어
     const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(() => {
@@ -61,6 +69,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
     const loadMessageHistoryRef = useRef<(key: CryptoKey, options?: { silent?: boolean }) => Promise<void>>(async () => { });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const initConnectionRef = useRef<(socket: any) => Promise<void>>(async () => { });
+    const prevThinkingRef = useRef(false);
 
     // 시스템 에러 자동 해제 (8초)
     useEffect(() => {
@@ -68,6 +77,34 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         const timer = setTimeout(() => setSystemError(null), 8000);
         return () => clearTimeout(timer);
     }, [systemError]);
+
+    // 경과 시간 타이머
+    useEffect(() => {
+        if (!isAiThinking) { setThinkingSeconds(0); return; }
+        const start = Date.now();
+        const interval = setInterval(() => {
+            setThinkingSeconds(Math.floor((Date.now() - start) / 1000));
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [isAiThinking]);
+
+    // 알림 권한 요청 (최초 1회)
+    useEffect(() => {
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    }, []);
+
+    // AI 응답 완료 시 알림 (페이지 비포커스 시)
+    useEffect(() => {
+        if (prevThinkingRef.current && !isAiThinking) {
+            if (typeof window !== 'undefined' && 'Notification' in window &&
+                Notification.permission === 'granted' && !document.hasFocus()) {
+                new Notification('Pocket AI', { body: '새 응답이 도착했습니다' });
+            }
+        }
+        prevThinkingRef.current = isAiThinking;
+    }, [isAiThinking]);
 
     // 텍스트에어리어 높이 자동 조절
     const adjustTextareaHeight = useCallback(() => {
@@ -540,7 +577,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     </div>
                 </div>
 
-                {/* 헤더 우측: 상태 뱃지 + 붙여넣기 버튼 */}
+                {/* 헤더 우측: 상태 뱃지 + 버튼들 */}
                 <div className="flex items-center gap-2 flex-shrink-0">
                     <span className={`hidden sm:inline text-[11px] px-2 py-0.5 rounded-full border font-medium ${isDisconnected
                         ? 'text-red-400 border-red-500/30 bg-red-500/10'
@@ -557,6 +594,24 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                             title={t('clipboardPaste')}
                         >
                             <ClipboardPaste size={15} />
+                        </button>
+                    )}
+                    {onRenameSession && (
+                        <button
+                            onClick={() => { setRenameValue(sessionMeta.sessionName || sessionMeta.hostname || ''); setIsRenaming(true); }}
+                            className="p-2 text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-700 rounded-lg transition-colors border border-gray-700/50"
+                            title="세션 이름 변경"
+                        >
+                            <Pencil size={15} />
+                        </button>
+                    )}
+                    {onDeleteSession && (
+                        <button
+                            onClick={() => setShowDeleteConfirm(true)}
+                            className="p-2 text-gray-400 hover:text-red-400 bg-gray-800/50 hover:bg-red-500/10 rounded-lg transition-colors border border-gray-700/50"
+                            title="세션 삭제"
+                        >
+                            <Trash2 size={15} />
                         </button>
                     )}
                 </div>
@@ -588,6 +643,69 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                         onTabChange={(tab) => setChatSettingsTab(tab)}
                     />
                 )}
+
+                {/* 이름 변경 모달 */}
+                {isRenaming && (
+                    <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 w-full max-w-xs mx-4 shadow-2xl">
+                            <h3 className="text-sm font-semibold text-white mb-3">세션 이름 변경</h3>
+                            <input
+                                type="text"
+                                value={renameValue}
+                                onChange={e => setRenameValue(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        const trimmed = renameValue.trim();
+                                        if (trimmed) { onRenameSession?.(trimmed); }
+                                        setIsRenaming(false);
+                                    }
+                                    if (e.key === 'Escape') setIsRenaming(false);
+                                }}
+                                autoFocus
+                                className="w-full text-sm bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500/60"
+                            />
+                            <div className="flex gap-2 mt-3">
+                                <button
+                                    onClick={() => { const trimmed = renameValue.trim(); if (trimmed) { onRenameSession?.(trimmed); } setIsRenaming(false); }}
+                                    className="flex-1 text-sm py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                                >
+                                    저장
+                                </button>
+                                <button
+                                    onClick={() => setIsRenaming(false)}
+                                    className="flex-1 text-sm py-2 rounded-xl border border-gray-700 text-gray-400 hover:text-white transition-colors"
+                                >
+                                    취소
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* 세션 삭제 확인 */}
+                {showDeleteConfirm && (
+                    <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 w-full max-w-xs mx-4 shadow-2xl">
+                            <h3 className="text-sm font-semibold text-white mb-1">세션 삭제</h3>
+                            <p className="text-xs text-gray-400 mb-4">이 세션을 삭제하시겠습니까?</p>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    className="flex-1 text-sm py-2 rounded-xl border border-gray-700 text-gray-400 hover:text-white transition-colors"
+                                >
+                                    취소
+                                </button>
+                                <button
+                                    onClick={() => { setShowDeleteConfirm(false); onDeleteSession?.(); onBack(); }}
+                                    className="flex-1 text-sm py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white transition-colors"
+                                >
+                                    삭제
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* 연결 중 오버레이 */}
                 {(isConnecting || isLoadingHistory) && !isDisconnected && messages.length === 0 && (
                     <div className="absolute inset-0 z-10 bg-gray-950/85 flex flex-col items-center justify-center text-gray-300 gap-4 backdrop-blur-sm">
@@ -625,7 +743,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                     </div>
                 )}
 
-                <MessageList messages={messages} isAiThinking={isAiThinking} onOptionSelect={handleOptionSelect} onPermissionResponse={handlePermissionResponse} />
+                <MessageList messages={messages} isAiThinking={isAiThinking} onOptionSelect={handleOptionSelect} onPermissionResponse={handlePermissionResponse} thinkingSeconds={thinkingSeconds} />
 
                 {/* 입력 영역 */}
                 <div className="flex-none bg-gray-950 w-full border-t border-gray-800/60 relative">
@@ -697,6 +815,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                                         >
                                             <span className="w-2 h-2 rounded-sm bg-red-400 inline-block flex-shrink-0" />
                                             {t('stopGeneration')}
+                                            {thinkingSeconds > 0 && <span className="text-red-400/60 ml-0.5">{thinkingSeconds}s</span>}
                                         </button>
                                     ) : (
                                         <p className="ml-1 text-[10px] text-gray-700 font-mono select-none">

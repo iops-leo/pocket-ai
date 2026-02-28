@@ -394,8 +394,6 @@ export default function DashboardPage() {
                     sessions={sessions}
                     activeSessionId={activeSession}
                     onSelectSession={handleSelectSession}
-                    onDeleteSession={handleDeleteSession}
-                    onRenameSession={handleRenameSession}
                     onNewSession={() => setShowNewSessionModal(true)}
                     onRefresh={() => fetchSessions(false)}
                     isCollapsed={isSidebarCollapsed}
@@ -432,6 +430,8 @@ export default function DashboardPage() {
                                 }
                             }}
                             embedded={true}
+                            onRenameSession={(name) => handleRenameSession(sessionId, name)}
+                            onDeleteSession={() => handleDeleteSession(sessionId)}
                         />
                     </div>
                 ))}

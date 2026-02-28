@@ -136,12 +136,12 @@ export function ChatSettingsPanel({ settings, onSettingsChange, onClose, isClaud
     }
 
     return (
-        <div className="absolute inset-0 z-30 flex justify-end">
+        <div className="absolute inset-0 z-30 flex items-end sm:items-center justify-center">
             {/* 뒷배경 */}
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
             {/* 패널 */}
-            <div className="relative z-10 w-full max-w-xs bg-gray-900 border-l border-gray-800 h-full overflow-y-auto shadow-2xl flex flex-col">
+            <div className="relative z-10 w-full max-w-sm bg-gray-900 border border-gray-800 rounded-t-2xl sm:rounded-2xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col mx-0 sm:mx-4">
                 {/* 헤더: 탭 + 닫기 */}
                 <div className="flex items-center border-b border-gray-800 flex-shrink-0">
                     <button

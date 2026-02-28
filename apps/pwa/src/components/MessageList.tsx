@@ -51,14 +51,24 @@ function CopyButton({ text }: { text: string }) {
     );
 }
 
-function ThinkingIndicator() {
+const THINKING_PHRASES = ['생각하는 중', '분석하는 중', '코드 작성 중', '처리하는 중', '답변 작성 중'];
+
+function ThinkingIndicator({ seconds }: { seconds: number }) {
+    const phraseIndex = Math.floor(seconds / 3) % THINKING_PHRASES.length;
+    const phrase = THINKING_PHRASES[phraseIndex];
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${seconds}s`;
+
     return (
         <div className="flex justify-start px-3">
             <div className="bg-gray-800/80 border border-gray-700/50 rounded-2xl rounded-bl-sm px-4 py-3">
-                <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:0ms]" />
-                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:150ms]" />
-                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:300ms]" />
+                <div className="flex items-center gap-2">
+                    <span className="text-blue-400 animate-spin inline-block" style={{ animationDuration: '2s' }}>✽</span>
+                    <span className="text-sm text-gray-300">{phrase}…</span>
+                    {seconds > 0 && (
+                        <span className="text-xs text-gray-500 font-mono">{timeStr}</span>
+                    )}
                 </div>
             </div>
         </div>
@@ -164,9 +174,10 @@ interface MessageListProps {
     isAiThinking?: boolean;
     onOptionSelect?: (option: string) => void;
     onPermissionResponse?: (requestId: string, approved: boolean) => void;
+    thinkingSeconds?: number;
 }
 
-export function MessageList({ messages, isAiThinking, onOptionSelect, onPermissionResponse }: MessageListProps) {
+export function MessageList({ messages, isAiThinking, onOptionSelect, onPermissionResponse, thinkingSeconds = 0 }: MessageListProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -272,7 +283,7 @@ export function MessageList({ messages, isAiThinking, onOptionSelect, onPermissi
                             />
                         );
                     })}
-                    {isAiThinking && <ThinkingIndicator />}
+                    {isAiThinking && <ThinkingIndicator seconds={thinkingSeconds} />}
                     <div ref={bottomRef} />
                 </div>
             </div>
