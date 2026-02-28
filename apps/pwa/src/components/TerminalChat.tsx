@@ -671,23 +671,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                             />
                             {/* 2행: 툴바 */}
                             <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-gray-800/60">
-                                {/* 왼쪽: 중단 버튼 or 힌트 */}
-                                {isAiThinking ? (
-                                    <button
-                                        type="button"
-                                        onClick={handleInterrupt}
-                                        className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-full transition-colors"
-                                    >
-                                        <span className="w-2 h-2 rounded-sm bg-red-400 inline-block flex-shrink-0" />
-                                        {t('stopGeneration')}
-                                    </button>
-                                ) : (
-                                    <p className="text-[10px] text-gray-700 font-mono select-none">
-                                        <kbd>Shift+Enter</kbd> 줄바꿈
-                                    </p>
-                                )}
-                                {/* 가운데: 설정 아이콘 */}
-                                <div className="flex items-center gap-0.5">
+                                {/* 왼쪽: 설정 아이콘 + 중단 버튼 or 힌트 */}
+                                <div className="flex items-center gap-1">
                                     <button
                                         type="button"
                                         onClick={() => setChatSettingsTab(prev => prev === 'session' ? null : 'session')}
@@ -704,6 +689,20 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                                     >
                                         <Network size={14} />
                                     </button>
+                                    {isAiThinking ? (
+                                        <button
+                                            type="button"
+                                            onClick={handleInterrupt}
+                                            className="ml-1 flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-full transition-colors"
+                                        >
+                                            <span className="w-2 h-2 rounded-sm bg-red-400 inline-block flex-shrink-0" />
+                                            {t('stopGeneration')}
+                                        </button>
+                                    ) : (
+                                        <p className="ml-1 text-[10px] text-gray-700 font-mono select-none">
+                                            <kbd>Shift+Enter</kbd> 줄바꿈
+                                        </p>
+                                    )}
                                 </div>
                                 {/* 오른쪽: 전송 버튼 */}
                                 <button
