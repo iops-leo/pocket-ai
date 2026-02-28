@@ -80,7 +80,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
 
     // 메시지 이력 로드 — Pure Relay: 서버에 이력 없음, CLI가 history-start/end로 전송
     // 이 함수는 key exchange 완료 신호 역할만 함 (실제 이력은 소켓 update 핸들러에서 처리)
-    const loadMessageHistory = useCallback(async (_sharedSecret: CryptoKey, _options?: { silent?: boolean }) => {
+    const loadMessageHistory = useCallback(async (_sharedSecret: CryptoKey, _options?: { silent?: boolean }) => { // eslint-disable-line @typescript-eslint/no-unused-vars
         historyLoadedRef.current = true;
     }, []);
 
