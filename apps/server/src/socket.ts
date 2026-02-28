@@ -1,11 +1,8 @@
 import { Server, Socket } from 'socket.io';
 import { FastifyInstance } from 'fastify';
 import { activeSessions } from './routes/sessions.js';
-import { db, EncryptedBody } from './db/db.js';
+import { db } from './db/db.js';
 import { sql } from 'kysely';
-
-// 세션별 메시지 시퀀스 번호 관리 (메모리 캐시)
-const sessionSeqMap = new Map<string, number>();
 
 // Socket.IO per-socket rate limiting (update 이벤트 기준)
 const socketRateStore = new Map<string, { count: number; resetAt: number }>();
@@ -31,41 +28,7 @@ setInterval(() => {
     }
 }, 10 * 60_000);
 
-async function getNextSeq(sessionId: string): Promise<number> {
-    // 캐시에 있으면 사용
-    if (sessionSeqMap.has(sessionId)) {
-        const next = sessionSeqMap.get(sessionId)! + 1;
-        sessionSeqMap.set(sessionId, next);
-        return next;
-    }
 
-    // 캐시에 없으면 DB에서 마지막 seq 조회
-    const lastMsg = await db
-        .selectFrom('messages')
-        .select('seq')
-        .where('session_id', '=', sessionId)
-        .orderBy('seq', 'desc')
-        .limit(1)
-        .executeTakeFirst();
-
-    const next = (lastMsg?.seq ?? 0) + 1;
-    sessionSeqMap.set(sessionId, next);
-    return next;
-}
-
-async function saveMessage(sessionId: string, sender: 'cli' | 'pwa', body: EncryptedBody): Promise<void> {
-    const seq = await getNextSeq(sessionId);
-
-    await db
-        .insertInto('messages')
-        .values({
-            session_id: sessionId,
-            seq,
-            sender,
-            encrypted_body: JSON.stringify(body) as any,  // JSONB로 저장
-        })
-        .execute();
-}
 
 export function setupSocketIO(io: Server, fastify: FastifyInstance) {
 
@@ -250,16 +213,8 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
             if (!sessionId || !body) return;
             if (!socket.rooms.has(`session_${sessionId}`)) return;
 
-            // 메시지 중계 (실시간)
+            // 메시지 중계 (실시간) — Pure Relay: DB 저장 없음
             socket.to(`session_${sessionId}`).emit('update', payload);
-
-            // 암호화된 메시지 DB 저장 (비동기, non-blocking)
-            if (body.cipher && body.iv && (sender === 'cli' || sender === 'pwa')) {
-                saveMessage(sessionId, sender, body).catch((err) => {
-                    // 저장 실패해도 중계는 이미 완료됨
-                    console.error('Failed to save message:', err);
-                });
-            }
         });
 
         // 5. disconnect: 세션 offline 처리

@@ -5,7 +5,7 @@ import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, History, ArrowUp, Settings
 import { ChatSettingsPanel, type ChatSettings } from './ChatSettingsPanel';
 import { SlashCommandDropdown, type SlashCommand } from './SlashCommandDropdown';
 import { io, Socket } from 'socket.io-client';
-import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt, unwrapSessionKey, type EncryptedData, type MessagesResponse } from '@pocket-ai/wire';
+import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt, unwrapSessionKey, type EncryptedData } from '@pocket-ai/wire';
 import { MessageList, type ChatMessage } from './MessageList';
 import { useTranslations } from 'next-intl';
 
@@ -78,68 +78,11 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
         ta.style.height = Math.min(ta.scrollHeight, maxHeight) + 'px';
     }, []);
 
-    // 메시지 이력 로드 (ref 기반으로 의존성 체인 차단)
-    const loadMessageHistory = useCallback(async (sharedSecret: CryptoKey, options?: { silent?: boolean }) => {
-        const token = localStorage.getItem('pocket_ai_token');
-        if (!token || historyLoadedRef.current) return;
-
-        const silent = Boolean(options?.silent);
-        if (!silent) {
-            setIsLoadingHistory(true);
-        }
-        try {
-            const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-            const res = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/messages?limit=100`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            if (!res.ok) throw new Error('Failed to fetch history');
-
-            const json = await res.json();
-            const data = json.data as MessagesResponse;
-
-            const decryptedMessages: ChatMessage[] = [];
-            for (const msg of data.messages) {
-                try {
-                    const decryptedJson = await decrypt(msg.encryptedBody, sharedSecret);
-                    const parsed = JSON.parse(decryptedJson);
-
-                    if (parsed.t === 'text') {
-                        decryptedMessages.push({
-                            kind: 'text',
-                            id: msg.id,
-                            role: msg.sender === 'pwa' ? 'user' : 'assistant',
-                            content: parsed.text,
-                            timestamp: new Date(msg.createdAt).getTime(),
-                        });
-                    } else if (parsed.t === 'tool-call') {
-                        decryptedMessages.push({
-                            kind: 'tool',
-                            id: parsed.id,
-                            name: parsed.name,
-                            args: parsed.arguments,
-                            status: 'done',
-                        });
-                    }
-                } catch {
-                    console.debug('Skipping message with different key:', msg.id);
-                }
-            }
-
-            // CLI 로컬 이력이 이미 도착 중이면 서버 이력으로 덮어쓰지 않음
-            if (decryptedMessages.length > 0 && !cliHistoryActiveRef.current) {
-                setMessages(decryptedMessages);
-                lastSeqRef.current = data.messages[data.messages.length - 1]?.seq;
-            }
-            historyLoadedRef.current = true;
-        } catch (e) {
-            console.error('Failed to load history:', e);
-        } finally {
-            if (!silent) {
-                setIsLoadingHistory(false);
-            }
-        }
-    }, [sessionId]);
+    // 메시지 이력 로드 — Pure Relay: 서버에 이력 없음, CLI가 history-start/end로 전송
+    // 이 함수는 key exchange 완료 신호 역할만 함 (실제 이력은 소켓 update 핸들러에서 처리)
+    const loadMessageHistory = useCallback(async (_sharedSecret: CryptoKey, _options?: { silent?: boolean }) => {
+        historyLoadedRef.current = true;
+    }, []);
 
     // ref 동기화: connect 이벤트에서 항상 최신 함수 사용
     loadMessageHistoryRef.current = loadMessageHistory;
