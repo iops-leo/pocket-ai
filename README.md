@@ -174,15 +174,6 @@ POCKET_AI_SERVER=https://your-server.com pocket-ai
 
 ---
 
-## 문서
-
-- [ARCHITECTURE.md](./docs/ARCHITECTURE.md) — 시스템 설계
-- [API.md](./docs/API.md) — REST + Socket.IO 레퍼런스
-- [SECURITY.md](./docs/SECURITY.md) — 보안 설계 및 위협 모델
-- [MULTI_MODEL_ORCHESTRATION.md](./docs/MULTI_MODEL_ORCHESTRATION.md) — 멀티모델 오케스트레이션
-
----
-
 ## 라이선스
 
 MIT License
