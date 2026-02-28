@@ -249,6 +249,9 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                             cliHistoryActiveRef.current = false;
                             setIsLoadingHistory(false);
                         }
+                        if (msg.event === 'thinking-start') {
+                            setIsAiThinking(true);
+                        }
                     }
 
                     if (msg.t === 'text') {

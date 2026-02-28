@@ -29,12 +29,20 @@ function resolveWorkingDirectory(input) {
     }
     return resolved;
 }
+// 이중 spawn 방지: 이미 실행 중인 세션 ID 추적
+const spawnedSessions = new Set();
 function spawnSessionFromRequest(payload) {
+    // 중복 spawn 방지
+    if (spawnedSessions.has(payload.sessionId)) {
+        console.log(`[Pocket AI] 이미 실행 중인 세션 (스킵): ${payload.sessionId.slice(0, 8)}...`);
+        return;
+    }
     const entryScript = process.argv[1];
     if (!entryScript) {
         console.error('[Pocket AI] spawn 실패: CLI entry를 찾을 수 없습니다.');
         return;
     }
+    spawnedSessions.add(payload.sessionId);
     const child = spawn(process.execPath, [
         entryScript,
         'start',
@@ -50,6 +58,10 @@ function spawnSessionFromRequest(payload) {
         env: { ...process.env },
     });
     child.unref();
+    // 프로세스 종료 시 Set에서 제거 (재spawn 허용)
+    child.on('exit', () => {
+        spawnedSessions.delete(payload.sessionId);
+    });
 }
 function stripAnsi(input) {
     return input.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
@@ -277,6 +289,11 @@ export async function startSession(command = 'claude', options = {}) {
                 catch { /* skip */ }
             }
             await send({ t: 'session-event', event: 'history-end' });
+            // Claude가 아직 응답 처리 중이면 PWA에 thinking 상태 복원
+            if (getIsAiThinking?.()) {
+                await send({ t: 'session-event', event: 'thinking-start' });
+                console.log('[Pocket AI] AI 처리 중 상태 PWA에 복원');
+            }
             console.log(`[Pocket AI] 로컬 이력 ${recent.length}개 PWA 전송 완료`);
         }
         catch (err) {
@@ -285,6 +302,8 @@ export async function startSession(command = 'claude', options = {}) {
     }
     // PWA 재연결 시 pending permissions 재전송용 (Claude 전용, bridge 생성 후 설정)
     let getPendingInputRequests = null;
+    // Claude가 현재 처리 중인지 확인 (재연결 시 thinking 상태 복원용)
+    let getIsAiThinking = null;
     // ─── 공통 서버 연결 옵션 (엔진 불문) ───
     function buildServerOptions(onPwaMessage) {
         return {
@@ -416,6 +435,7 @@ export async function startSession(command = 'claude', options = {}) {
             },
         });
         getPendingInputRequests = () => bridge.getPendingInputRequests();
+        getIsAiThinking = () => !bridge.isWaitingForInput;
         bridge.start();
         // 로컬 stdin → Claude (headless가 아닌 경우)
         if (!headless) {
