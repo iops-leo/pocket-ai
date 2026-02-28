@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Terminal, Shield, Wifi, ArrowRight, Lock, Zap, Smartphone, Share2 } from 'lucide-react';
+import { Loader2, Terminal, Shield, Wifi, ArrowRight, Lock, Zap, Smartphone, Share2, History, ShieldCheck } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 export default function LandingPage() {
@@ -304,9 +304,10 @@ export default function LandingPage() {
                 { label: t('orchStep1'), color: '#00f5a0', done: true },
                 { label: t('orchStep2'), color: '#00d4ff', done: true },
                 { label: t('orchStep3'), color: '#a78bfa', done: true },
-                { label: t('orchStep4'), color: '#00f5a0', done: false },
+                { label: t('orchStep4'), color: '#fb923c', done: true },
+                { label: t('orchStep5'), color: '#00f5a0', done: false },
               ].map((s, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,.03)' : 'none' }}>
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderBottom: i < 4 ? '1px solid rgba(255,255,255,.03)' : 'none' }}>
                   <span style={{ color: s.done ? s.color : '#3d444d', fontSize: 12, width: 14, flexShrink: 0 }}>{s.done ? '✓' : '›'}</span>
                   <span className="f-mono" style={{ fontSize: 11, color: s.done ? '#7d8590' : s.color }}>{s.label}</span>
                   {!s.done && <span className="cursor" style={{ fontSize: 11 }} />}
@@ -315,11 +316,12 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Bottom 2 cards */}
+          {/* Bottom 3 cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 18 }}>
             {[
               { num: '02', icon: <Smartphone size={20} color="#00d4ff" />, title: t('featureControl'), desc: t('featureControlDesc'), accent: '#00d4ff', glow: 'rgba(0,212,255,.1)' },
-              { num: '03', icon: <Lock size={20} color="#a78bfa" />, title: t('featureE2E'), desc: t('featureE2EDesc'), accent: '#a78bfa', glow: 'rgba(167,139,250,.1)' },
+              { num: '03', icon: <History size={20} color="#a78bfa" />, title: t('featureHistory'), desc: t('featureHistoryDesc'), accent: '#a78bfa', glow: 'rgba(167,139,250,.1)' },
+              { num: '04', icon: <ShieldCheck size={20} color="#fb923c" />, title: t('featurePermission'), desc: t('featurePermissionDesc'), accent: '#fb923c', glow: 'rgba(251,146,60,.1)' },
             ].map(f => (
               <div
                 key={f.num}
@@ -370,9 +372,18 @@ export default function LandingPage() {
             <div style={{ width: 26, height: 26, borderRadius: 8, background: 'linear-gradient(135deg,#00f5a0,#00d4ff)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Terminal size={13} color="#050810" strokeWidth={2.5} />
             </div>
-            <span className="f-mono" style={{ fontSize: 12, color: '#7d8590' }}>© {new Date().getFullYear()} Pocket AI</span>
+            <span className="f-mono" style={{ fontSize: 12, color: '#7d8590' }}>© {new Date().getFullYear()} Pocket AI · MIT License</span>
           </div>
-          <span className="f-mono" style={{ fontSize: 11, color: '#3d444d' }}>{t('footer')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <a href="https://github.com/iops-leo/pocket-ai" target="_blank" rel="noopener noreferrer"
+              className="f-mono" style={{ fontSize: 11, color: '#7d8590', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 5, transition: 'color .2s' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#00f5a0')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#7d8590')}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+              GitHub
+            </a>
+            <span className="f-mono" style={{ fontSize: 11, color: '#3d444d' }}>{t('footer')}</span>
+          </div>
         </footer>
       </div>
     </>
