@@ -1,133 +1,78 @@
 # Pocket AI
 
-**어디서든 PC의 AI CLI 세션을 이어서 사용하세요**
+**PC의 AI CLI를 어디서든 — 모바일, 태블릿, 다른 컴퓨터에서 이어서 사용하세요**
 
-모바일/웹 PWA에서 로컬 AI CLI 세션을 원격 제어하는 플랫폼입니다.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![PWA](https://img.shields.io/badge/PWA-pocket--ai--pwa.vercel.app-blue)](https://pocket-ai-pwa.vercel.app)
 
-## 빠른 시작 (Happy 스타일 심플 사용법)
+---
 
-```bash
-# 1. 설치 및 로그인 (최초 1회)
-npm install -g @pocket-ai/cli
-pocket-ai login
+## 무엇인가요?
 
-# 2. 사용 (이게 전부!)
-pocket-ai
-# → claude 자동 실행
-# → PWA에서 즉시 접속 가능
-# → 어디서든 이어서 작업
+로컬 PC에서 실행 중인 **Claude Code / Codex / Gemini CLI** 세션을 웹/모바일 PWA로 원격 제어하는 플랫폼입니다.
 
-# 3. Happy 스타일 세션 관리
-cd /project/A          # 폴더별 자동 세션 분리
-/switch gemini         # 세션 내에서 AI 엔진 전환
-cd /project/B          # 자동으로 새 세션 시작
+- 집에서 시작한 코딩 작업을 카페에서 폰으로 이어서
+- 터미널을 닫아도 백그라운드에서 AI가 계속 작업
+- 모든 대화는 E2E 암호화 — 서버는 내용을 볼 수 없음
+- **완전 무료, 오픈소스**
 
-# 4. 선택적 고급 사용
-pocket-ai start codex       # Codex 사용
-pocket-ai --no-remote       # 로컬 전용 모드
-```
-
-## 핵심 가치
-
-- **세션 연속성**: 출퇴근길, 회의 중에도 PC 작업 이어서 진행
-- **데몬 방식**: 터미널을 닫아도 백그라운드에서 세션 유지
-- **비용 최적화**: MVP 완전 무료, 성장 후 사용량 기반 과금 (5천 명까지 $20/월)
-- **간편한 설정**: GitHub OAuth 로그인만으로 디바이스 자동 연결
-- **E2E 암호화**: 서버는 암호화된 메시지만 중계 (복호화 불가)
-- **풍부한 UI**: 도구별 전용 뷰 (Diff, Bash, Code Highlight), 마크다운 렌더링
-
-## 아키텍처
-
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   PWA Client    │     │  Relay Server   │     │  PC CLI (daemon)│
-│   (Vercel)      │────▶│  Fastify +      │◀────│  @pocket-ai/cli │
-└─────────────────┘     │  Socket.IO      │     └─────────────────┘
-        │               │  (Railway)       │             │
-        │  Socket.IO    │                 │             ▼
-        │  + E2E 암호화 │  PostgreSQL     │     ┌─────────────────┐
-        │  (AES-256-GCM)│  (Kysely)       │     │  Claude Code    │
-        │               └─────────────────┘     │  Codex CLI      │
-        │                                        │  Gemini CLI     │
-        └────────────────────────────────────────┘ (확장 예정)
-                                                └─────────────────┘
-
-        ┌─────────────────┐
-        │  Remote Mode    │
-        │  @pocket-ai/cli │
-        │  (pocket-ai     │
-        │   remote)       │  ← 다른 머신에서 세션 원격 제어
-        └─────────────────┘
-```
-
-## 패키지 구조
-
-```
-pocket-ai/
-├── apps/
-│   ├── server/      # Fastify + Socket.IO 릴레이 (Railway 배포)
-│   └── pwa/         # Next.js PWA 클라이언트 (Vercel 배포, Phase 2: 네이티브)
-├── packages/
-│   ├── cli/         # CLI 래퍼 + 원격 제어 통합 - `claude` 대신 `pocket-ai` 실행, 데몬 관리
-│   └── wire/        # Wire 프로토콜, 타입 정의, 암호화
-└── docs/            # 문서
-```
-
-### 패키지별 역할
-
-| 패키지 | 설명 | 설치 |
-|--------|------|------|
-| `@pocket-ai/cli` | AI CLI 래핑 + 원격 세션 제어 통합. start/remote/status/stop 서브커맨드 | `npm install -g @pocket-ai/cli` |
-| `@pocket-ai/wire` | Wire 프로토콜, 공통 타입, AES-256-GCM 암호화 유틸 | 내부 의존성 |
-
-## 기술 스택
-
-| 컴포넌트 | 기술 | 배포 |
-|---------|------|------|
-| PWA | Next.js 14+ (App Router) | Vercel (무료) |
-| Server | Fastify + Socket.IO (pure relay) | Railway |
-| Database | PostgreSQL | Supabase |
-| CLI | Node.js + node-pty (래퍼 + 원격 제어 통합) | 로컬 (npm -g) |
-| 암호화 | ECDH P-256 + AES-256-GCM | Web Crypto / Node crypto |
-| 마크다운 | react-markdown + Prism.js | PWA |
-| i18n | next-intl (한국어/영어) | PWA |
+---
 
 ## 빠른 시작
 
-### PC CLI 설치
-
-```bash
-# PC CLI 설치
-npm install -g @pocket-ai/cli
-pocket-ai start          # `claude` 대신 실행
-pocket-ai codex          # `codex` 대신 실행
-```
-
-### 원격 접속 (다른 머신에서)
+### 1. CLI 설치 및 로그인
 
 ```bash
 npm install -g @pocket-ai/cli
-pocket-ai login            # GitHub OAuth 로그인
-pocket-ai remote list      # 활성 세션 목록
-pocket-ai remote <session-id>  # 세션 원격 접속
+pocket-ai login          # GitHub OAuth 로그인 (최초 1회)
 ```
 
-### PWA 접속 및 디바이스 페어링
+### 2. PC에서 세션 시작
 
-1. 브라우저에서 https://pocket-ai-pwa.vercel.app 접속
-2. GitHub OAuth로 계정 생성/로그인
-3. PC에서 `pocket-ai start` 실행 (같은 계정으로 로그인)
-4. PWA 대시보드 사이드바에 활성 PC 세션 자동 표시
-5. 세션 클릭 → ECDH 키교환으로 E2E 암호화 자동 체결!
+```bash
+pocket-ai                # Claude Code 실행 + 원격 대기
+pocket-ai start codex    # Codex 사용
+pocket-ai start gemini   # Gemini 사용
+pocket-ai start --cmd "aider"  # 커스텀 CLI
+```
 
-## PWA 주요 기능
+### 3. PWA에서 접속
 
-### 듀얼페인 레이아웃
-- **사이드바**: 세션 목록, 검색, AI 엔진 필터 (Claude/Gemini/Codex)
-- **채팅 영역**: 선택한 세션과 대화
-- **모바일**: 슬라이드인 사이드바 + 오버레이
+1. [pocket-ai-pwa.vercel.app](https://pocket-ai-pwa.vercel.app) 접속
+2. GitHub OAuth 로그인 (CLI와 같은 계정)
+3. 사이드바에서 활성 세션 클릭 → 자동 E2E 키교환 후 연결
 
-### 도구별 전용 뷰
+---
+
+## 주요 기능
+
+### 멀티모델 오케스트레이션
+
+Claude가 **오케스트레이터**로서 Gemini, Codex, Aider를 워커로 활용합니다.
+
+```
+Claude (conductor)
+  ├── ask_gemini  → 분석/리서치 작업
+  ├── ask_codex   → 코드 생성
+  └── ask_aider   → 파일 편집 (diff 자동 적용)
+```
+
+- PWA 설정 패널에서 빌트인 워커 On/Off 토글
+- 커스텀 워커 등록 (어떤 CLI든 추가 가능)
+- 워커 실행 중 실시간 진행 상태 + 경과 타이머 표시
+
+### 로컬 이력 자동 복원
+
+대화 이력은 **PC 로컬**에 저장됩니다 (`~/.config/pocket-ai/sessions/`).
+
+PWA가 재연결되면 CLI가 이력을 자동 전송 — 서버에는 아무것도 남지 않습니다.
+
+### 권한 프롬프트 원격 제어
+
+Claude Code가 파일 수정/명령 실행 권한을 요청할 때 PWA에서 **승인/거부** 가능.
+
+### 풍부한 도구 뷰
+
 | 도구 | 렌더링 |
 |------|--------|
 | **Edit** | Diff 뷰 (인라인 삭제/추가 하이라이팅) |
@@ -135,112 +80,108 @@ pocket-ai remote <session-id>  # 세션 원격 접속
 | **Bash** | `$` 프롬프트 + stdout/stderr 분리 |
 | **Read** | 파일 확장자 기반 구문 하이라이팅 |
 | **Grep** | 검색 패턴 + 매칭 결과 |
+| **ask_\*** | 워커 전용 카드 (경과시간, Aider diff) |
 
-### 채팅 UI
-- 마크다운 렌더링 + Prism.js 코드 하이라이팅
-- AI `<options>` 태그 → 선택지 버튼 자동 변환
-- 메시지 복사, 자동 스크롤, Thinking 인디케이터
-- 실시간 연결 상태 표시 (녹색/노란색/빨간색)
+---
 
-## 로컬/원격 모드
-
-- **로컬 모드**: PC 키보드에서 직접 명령어 입력 → 일반 CLI처럼 동작
-- **원격 모드**: 폰/다른 머신에서 PWA 또는 Agent CLI로 세션 제어
-- **데몬**: 백그라운드 프로세스가 터미널을 닫아도 세션 유지
-
-## 비용 예상
+## 아키텍처
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│              월간 인프라 비용 (Railway + Supabase + Vercel 기준)           │
-│                     순수 릴레이 + 메시지 무저장 구조                        │
-├─────────────┬──────────────────────────────┬──────────────────────────────┤
-│  사용자 수   │  인프라                       │  월 비용                     │
-├─────────────┼──────────────────────────────┼──────────────────────────────┤
-│  1-100      │  Railway 무료 + Supabase 무료 │  $0                          │
-│  100-1K     │  Railway Hobby               │  $5                          │
-│  1K-5K      │  Railway Pro                 │  $20                         │
-│  5K-10K     │  Railway Pro + 리소스 증설    │  $30-50                      │
-│  10K+       │  Railway Team + Supabase Pro  │  $75-150                     │
-└─────────────┴──────────────────────────────┴──────────────────────────────┘
+┌──────────┐    Socket.IO     ┌──────────────┐    Socket.IO    ┌──────────────┐
+│  PWA     │  + AES-256-GCM  │  Relay Server│ + AES-256-GCM  │  PC CLI      │
+│ (Vercel) │◀───────────────▶│  (Railway)   │◀──────────────▶│ @pocket-ai   │
+└──────────┘                 └──────────────┘                 └──────┬───────┘
+                                                                      │
+                                                               ┌──────▼───────┐
+                                                               │ Claude Code  │
+                                                               │ Codex CLI    │
+                                                               │ Gemini CLI   │
+                                                               │ 커스텀 CLI   │
+                                                               └──────────────┘
 ```
 
-> **비용이 낮은 이유**: 메시지를 저장하지 않아 DB는 Supabase 무료 티어로 수만 명 버팀. WebSocket 릴레이는 CPU 부담이 거의 없어 소형 서버로도 충분.
+**Pure Relay 원칙**: 서버는 암호화된 메시지를 중계만 할 뿐, 내용을 저장하거나 복호화하지 않습니다. 메시지 이력은 로컬 PC에만 저장됩니다.
 
-## 상업용 비전
-
-### Phase 1: MVP (완전 무료)
-- 개인 사용자 타겟
-- CLI + Server + PWA + GitHub OAuth 로그인 + 계정 기반 자동 연결 + E2E 암호화 + 데몬
-
-### Phase 2: Pro ($8.99/월)
-- 멀티 디바이스 페어링 (3대)
-- 푸시 알림
-- 네이티브 앱 (Expo)
-
-### Phase 3: Team ($50+/월/팀)
-- 팀 공유 세션
-- 권한 관리
-- 음성 입력
-- API 액세스
-
-### Phase 4: Enterprise (견적)
-- SLA 보장
-- 온프레미스 옵션
-- 전용 지원
+---
 
 ## 지원 AI CLI
 
-| CLI | 커맨드 | 설치 | 상태 |
-|-----|--------|------|------|
-| Claude Code | `pocket-ai` | `npm i -g @anthropic-ai/claude-code` | ✅ 기본값 |
-| OpenAI Codex | `pocket-ai start codex` | `npm i -g @openai/codex` | ✅ 지원 (바이너리 설치 필요) |
-| Google Gemini | `pocket-ai start gemini` | `npm i -g @google/gemini-cli` | ✅ 지원 (바이너리 설치 필요) |
+| CLI | 실행 방법 | 설치 |
+|-----|-----------|------|
+| Claude Code | `pocket-ai` | `npm i -g @anthropic-ai/claude-code` |
+| OpenAI Codex | `pocket-ai start codex` | `npm i -g @openai/codex` |
+| Google Gemini | `pocket-ai start gemini` | `npm i -g @google/gemini-cli` |
+| 기타 CLI | `pocket-ai start --cmd "<바이너리>"` | 직접 설치 |
 
-> **새 AI CLI 추가 공수**: 표준 인터랙티브 터미널 CLI라면 코드 변경 없이 바로 됨. `pocket-ai start <바이너리이름>` 형태로 모든 CLI 래핑 가능.
+---
+
+## 패키지 구조
+
+```
+pocket-ai/
+├── apps/
+│   ├── server/    # Fastify + Socket.IO 릴레이 (Railway)
+│   └── pwa/       # Next.js PWA (Vercel)
+├── packages/
+│   ├── cli/       # pocket-ai CLI 바이너리
+│   └── wire/      # 공유 타입 + AES-256-GCM 암호화
+└── docs/
+```
+
+---
+
+## 셀프호스팅
+
+직접 서버를 띄우고 싶다면:
+
+```bash
+# 환경변수 설정
+DATABASE_URL=...      # PostgreSQL
+SESSION_SECRET=...
+ALLOWED_ORIGINS=...
+
+# 서버 실행
+cd apps/server
+npm install && npm start
+
+# CLI에서 서버 지정
+POCKET_AI_SERVER=https://your-server.com pocket-ai
+```
+
+---
 
 ## 개발 로드맵
 
-### Phase 1: MVP ✅ 완료
-- [x] 프로젝트 구조 설계
-- [x] `@pocket-ai/cli` 구현 (Claude Code 래핑 + 데몬)
-- [x] Socket.IO 릴레이 서버 (Fastify + Kysely + PostgreSQL)
-- [x] PWA 클라이언트 (채팅 UI)
-- [x] GitHub OAuth 로그인 + JWT 인증
-- [x] ECDH P-256 기반 E2E 암호화 키 교환
-- [x] AES-256-GCM E2E 암호화
-- [x] 로컬/원격 모드 전환
-- [x] Railway + Supabase + Vercel 배포 완료
-- [x] 듀얼페인 레이아웃 (사이드바 + 채팅)
-- [x] 도구별 전용 뷰 (Edit Diff, Bash, Read, Grep, Write)
-- [x] 마크다운 렌더링 + 코드 하이라이팅
-- [x] AI `<options>` 태그 버튼 렌더링
-- [x] 다국어 지원 (한국어/영어)
+### ✅ 완료
+- CLI 래퍼 (Claude / Codex / Gemini / 커스텀 엔진)
+- Socket.IO 릴레이 서버 (Pure Relay)
+- ECDH P-256 + AES-256-GCM E2E 암호화
+- GitHub OAuth 로그인
+- PWA 듀얼페인 레이아웃 (사이드바 + 채팅)
+- 도구별 전용 뷰 (Edit Diff, Bash, Read, Grep)
+- 마크다운 렌더링 + 코드 하이라이팅
+- 권한 프롬프트 원격 제어
+- 멀티모델 오케스트레이션 (ask_gemini / ask_codex / ask_aider)
+- 빌트인/커스텀 워커 UI + 영속화
+- 로컬 이력 저장 + PWA 재연결 자동 복원
+- 다국어 지원 (한국어/영어)
 
-### Phase 2: 안정화 + 네이티브
-- [ ] 푸시 알림
-- [ ] 네이티브 앱 (Expo)
-- [ ] 팀 SSO (SAML/OIDC)
-- [ ] 오프라인 메시지 큐잉
-- [ ] 재연결 로직 강화
+### 🔜 예정
+- 푸시 알림
+- Gemini REST API 직접 호출 (CLI 없이)
+- 워커 병렬 실행
+- 네이티브 앱 (Expo)
 
-### Phase 3: 수익화
-- [ ] 결제 연동 (Stripe)
-- [ ] Pro 플랜 기능
-- [ ] 팀 기능
-- [ ] 음성 입력
-
-### Phase 4: 확장
-- [ ] API 액세스
-- [ ] 추가 CLI 지원 (Codex, Gemini)
-- [ ] 엔터프라이즈 기능
+---
 
 ## 문서
 
-- [ARCHITECTURE.md](./docs/ARCHITECTURE.md) - 시스템 아키텍처
-- [BUSINESS.md](./docs/BUSINESS.md) - 비즈니스 모델 및 가격
-- [SECURITY.md](./docs/SECURITY.md) - 보안 설계
-- [API.md](./docs/API.md) - API 레퍼런스
+- [ARCHITECTURE.md](./docs/ARCHITECTURE.md) — 시스템 설계
+- [API.md](./docs/API.md) — REST + Socket.IO 레퍼런스
+- [SECURITY.md](./docs/SECURITY.md) — 보안 설계 및 위협 모델
+- [MULTI_MODEL_ORCHESTRATION.md](./docs/MULTI_MODEL_ORCHESTRATION.md) — 멀티모델 오케스트레이션
+
+---
 
 ## 라이선스
 
