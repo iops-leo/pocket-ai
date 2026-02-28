@@ -135,18 +135,23 @@ pocket-ai/
 직접 서버를 띄우고 싶다면:
 
 ```bash
-# 환경변수 설정
-DATABASE_URL=...      # PostgreSQL
-SESSION_SECRET=...
-ALLOWED_ORIGINS=...
+# 1. 환경변수 설정 (apps/server/.env)
+DATABASE_URL=postgresql://user:pass@localhost:5432/pocketai
+JWT_SECRET=your-secret-here
+GITHUB_CLIENT_ID=your-github-oauth-app-id
+GITHUB_CLIENT_SECRET=your-github-oauth-app-secret
+GITHUB_CALLBACK_URL=https://your-server.com/auth/github/callback
+ALLOWED_ORIGINS=https://your-pwa.com,http://localhost:3002
+PORT=3001
 
-# 서버 실행
-cd apps/server
-npm install && npm start
+# 2. 서버 실행
+cd apps/server && npm install && npm start
 
-# CLI에서 서버 지정
-POCKET_AI_SERVER=https://your-server.com pocket-ai
+# 3. CLI에서 내 서버로 로그인
+pocket-ai login --server https://your-server.com
 ```
+
+> **로컬 PostgreSQL**: `DATABASE_URL=postgresql://localhost:5432/pocketai` 로 설정하면 별도 DB 서비스 없이 동작합니다.
 
 ---
 
