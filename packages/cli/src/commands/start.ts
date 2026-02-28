@@ -416,6 +416,9 @@ export async function startSession(command: string = 'claude', options: StartOpt
           command: process.execPath,
           args: [mcpServerPath],
           env: {
+            // PATH/HOME 필수 — 없으면 MCP 서버가 gemini/codex/aider 바이너리를 못 찾음
+            PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
+            HOME: process.env.HOME || os.homedir(),
             POCKET_AI_CWD: cwd,
             POCKET_AI_ENABLE_GEMINI: String(savedCfg.builtinWorkers.gemini),
             POCKET_AI_ENABLE_AIDER:  String(savedCfg.builtinWorkers.aider),
@@ -423,6 +426,7 @@ export async function startSession(command: string = 'claude', options: StartOpt
             ...(process.env.GEMINI_API_KEY ? { GEMINI_API_KEY: process.env.GEMINI_API_KEY } : {}),
             ...(process.env.GOOGLE_API_KEY ? { GOOGLE_API_KEY: process.env.GOOGLE_API_KEY } : {}),
             ...(process.env.OPENAI_API_KEY ? { OPENAI_API_KEY: process.env.OPENAI_API_KEY } : {}),
+            ...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
           },
         };
 
@@ -528,6 +532,10 @@ export async function startSession(command: string = 'claude', options: StartOpt
                   cfg.mcpServers['pocket-ai-orchestrator'].env.POCKET_AI_ENABLE_GEMINI = String(workers.gemini !== false);
                   cfg.mcpServers['pocket-ai-orchestrator'].env.POCKET_AI_ENABLE_CODEX  = String(workers.codex  !== false);
                   cfg.mcpServers['pocket-ai-orchestrator'].env.POCKET_AI_ENABLE_AIDER  = String(workers.aider  !== false);
+                  // PATH가 없으면 추가 (이전 등록 시 누락된 경우 복구)
+                  if (!cfg.mcpServers['pocket-ai-orchestrator'].env.PATH) {
+                    cfg.mcpServers['pocket-ai-orchestrator'].env.PATH = process.env.PATH || '/usr/local/bin:/usr/bin:/bin';
+                  }
                   const tmpPath = claudeConfigPath + '.tmp';
                   fs.writeFileSync(tmpPath, JSON.stringify(cfg, null, 2), 'utf-8');
                   fs.renameSync(tmpPath, claudeConfigPath);

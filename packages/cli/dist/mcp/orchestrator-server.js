@@ -118,11 +118,9 @@ function callCustomWorker(binary, prompt) {
 // ── OpenAI Codex CLI: GPT 기반 코드 편집 ─────────────────────
 function callCodex(prompt) {
     return new Promise((resolve, reject) => {
-        // codex <prompt> --approval-mode auto-edit --quiet : 비대화형 모드
+        // codex exec <prompt> : 비대화형 실행 모드 (Rust 기반 새 Codex CLI)
         const child = spawn('codex', [
-            prompt,
-            '--approval-mode', 'auto-edit', // 파일 편집 자동 승인
-            '--quiet', // 불필요한 출력 제거
+            'exec', prompt,
         ], {
             cwd: SESSION_CWD,
             stdio: ['ignore', 'pipe', 'pipe'],
