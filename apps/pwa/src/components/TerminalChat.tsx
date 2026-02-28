@@ -752,7 +752,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false }: TerminalCh
                                 <button
                                     type="button"
                                     onClick={() => handleSend()}
-                                    disabled={!inputValue.trim() || isDisconnected || isAiThinking}
+                                    disabled={!inputValue.trim() || isDisconnected}
                                     className="flex-shrink-0 w-8 h-8 flex justify-center items-center bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-full transition-all active:scale-90"
                                 >
                                     <ArrowUp size={16} strokeWidth={2.5} />
