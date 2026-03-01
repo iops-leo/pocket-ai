@@ -21,7 +21,8 @@ export interface SessionMessageToolResult {
 
 export interface SessionEventMessage {
     t: 'session-event';
-    event: 'typing' | 'stopped-typing' | 'processing' | 'interrupt';
+    event: 'typing' | 'stopped-typing' | 'processing' | 'interrupt' | 'history-start' | 'history-end' | 'thinking-start' | 'usage';
+    data?: unknown;
 }
 
 /** Claude가 도구 사용 권한 또는 선택지를 요청할 때 PWA로 전송 */

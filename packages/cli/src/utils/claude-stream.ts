@@ -271,6 +271,16 @@ export class ClaudeStreamBridge {
         const msg = message.message as Record<string, unknown> | undefined;
         if (!msg) return;
 
+        // usage 정보 추출 (output_tokens → PWA 실시간 토큰 표시용)
+        const usage = msg.usage as { output_tokens?: number } | undefined;
+        if (usage?.output_tokens) {
+            this.options.onMessage({
+                t: 'session-event',
+                event: 'usage',
+                data: { outputTokens: usage.output_tokens },
+            });
+        }
+
         const content = msg.content as Array<Record<string, unknown>> | undefined;
         if (!Array.isArray(content)) return;
 

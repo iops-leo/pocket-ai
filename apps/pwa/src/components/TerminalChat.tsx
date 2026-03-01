@@ -41,6 +41,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
 
     // 새 상태
     const [thinkingSeconds, setThinkingSeconds] = useState(0);
+    const [thinkingTokens, setThinkingTokens] = useState(0);
     const [isRenaming, setIsRenaming] = useState(false);
     const [renameValue, setRenameValue] = useState('');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -252,10 +253,16 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                         if (msg.event === 'thinking-start') {
                             setIsAiThinking(true);
                         }
+                        if (msg.event === 'usage' && msg.data) {
+                            const tokens = (msg.data as { outputTokens?: number }).outputTokens;
+                            if (tokens) setThinkingTokens(tokens);
+                        }
                     }
 
                     if (msg.t === 'text') {
                         const isHistory = Boolean(msg._history);
+                        // 실시간 응답 수신 시 타이머 리셋 (현재 작업 경과 시간 표시)
+                        if (!isHistory) setThinkingSeconds(0);
                         setMessages(prev => [...prev, {
                             kind: 'text',
                             id: crypto.randomUUID(),
@@ -267,6 +274,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
 
                     if (msg.t === 'tool-call') {
                         const isHistory = Boolean(msg._history);
+                        if (!isHistory) setThinkingSeconds(0);
                         setMessages(prev => [...prev, {
                             kind: 'tool',
                             id: msg.id,
@@ -278,6 +286,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                     }
 
                     if (msg.t === 'tool-result') {
+                        if (!msg._history) setThinkingSeconds(0);
                         setMessages(prev => prev.map(m =>
                             m.kind === 'tool' && m.id === msg.id
                                 ? { ...m, output: msg.result, status: (msg.error ? 'error' : 'done') as 'error' | 'done', error: msg.error }
@@ -517,6 +526,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
         }
 
         setIsAiThinking(true);
+        setThinkingSeconds(0);
+        setThinkingTokens(0);
         setMessages(prev => [...prev, {
             kind: 'text',
             id: crypto.randomUUID(),
@@ -746,7 +757,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                     </div>
                 )}
 
-                <MessageList messages={messages} isAiThinking={isAiThinking} onOptionSelect={handleOptionSelect} onPermissionResponse={handlePermissionResponse} thinkingSeconds={thinkingSeconds} />
+                <MessageList messages={messages} isAiThinking={isAiThinking} onOptionSelect={handleOptionSelect} onPermissionResponse={handlePermissionResponse} thinkingSeconds={thinkingSeconds} thinkingTokens={thinkingTokens} />
 
                 {/* 입력 영역 */}
                 <div className="flex-none bg-gray-950 w-full border-t border-gray-800/60 relative">
