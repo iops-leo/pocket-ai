@@ -391,8 +391,13 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
 
     // 텍스트에어리어: Enter = 전송, Shift+Enter = 줄바꿈
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        // 슬래시 드롭다운이 열려 있으면 키보드 이벤트는 드롭다운이 처리
-        if (showSlashDropdown) return;
+        // 슬래시 드롭다운이 열려 있으면 Enter/방향키는 줄바꿈 방지
+        if (showSlashDropdown) {
+            if (e.key === 'Enter' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                e.preventDefault();
+            }
+            return;
+        }
 
         if (e.key === 'Enter' && !e.shiftKey && !isComposingRef.current) {
             e.preventDefault();
