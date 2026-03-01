@@ -67,6 +67,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
     const lastSeqRef = useRef<number | undefined>(undefined);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const isComposingRef = useRef(false);
+    const pendingClearRef = useRef(false);
     // 일시적 disconnect(초기 로딩 등)에서 오버레이 번쩍임 방지용 grace period 타이머
     const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const historyLoadedRef = useRef(false);
@@ -258,6 +259,10 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                     if (msg.t === 'session-event') {
                         if (msg.event === 'stopped-typing') {
                             setIsAiThinking(false);
+                            if (pendingClearRef.current) {
+                                pendingClearRef.current = false;
+                                setMessages([{ kind: 'text', id: crypto.randomUUID(), role: 'assistant', content: '✓ 대화가 초기화됐습니다.' }]);
+                            }
                         }
                         if (msg.event === 'history-start') {
                             cliHistoryActiveRef.current = true;
@@ -540,6 +545,9 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
         if (!(overrideText ?? inputValue).trim() || !socketRef.current || !encryptKey || isDisconnected) return;
 
         const text = overrideText ?? inputValue;
+        if (text.trim().toLowerCase().startsWith('/clear')) {
+            pendingClearRef.current = true;
+        }
         setInputValue('');
         // 높이 초기화
         if (textareaRef.current) {
