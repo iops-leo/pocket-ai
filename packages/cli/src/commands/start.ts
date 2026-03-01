@@ -378,6 +378,10 @@ export async function startSession(command: string = 'claude', options: StartOpt
       },
       onAuthError: (data: { error: string }) => {
         console.error(`서버 인증 실패: ${data.error}`);
+        if (data.error === 'Invalid token') {
+          console.error('\n[Pocket AI] 토큰이 만료됐습니다. 다시 로그인해주세요: pocket-ai login\n');
+          socket?.disconnect();
+        }
       },
       onKeyExchange: async (data: { publicKey: string }) => {
         try {

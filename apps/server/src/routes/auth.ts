@@ -81,7 +81,7 @@ export async function authRoutes(fastify: FastifyInstance) {
                 name: githubUser.name || githubUser.login,
                 login: githubUser.login,
                 avatar_url: githubUser.avatar_url,
-            }, { expiresIn: '7d' });
+            }, { expiresIn: '30d' });
 
             // CLI 로그인: state에 포트가 인코딩된 경우 로컬 서버로 리다이렉트
             const rawState = (request.query as any)?.state as string || '';
