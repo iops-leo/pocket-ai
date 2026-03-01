@@ -242,7 +242,7 @@ export function MessageList({ messages, isAiThinking, isHistoryLoading, onOption
                             return (
                                 <div key={msg.id} className="flex justify-start group">
                                     <div className="max-w-[85%] w-full">
-                                        <div className="bg-gray-800/80 border border-gray-700/50 text-gray-100 rounded-2xl rounded-bl-sm px-4 py-3 text-[13.5px] leading-relaxed shadow-sm overflow-hidden">
+                                        <div className="bg-gray-800/80 border border-gray-700/50 text-gray-100 rounded-2xl rounded-bl-sm px-4 py-3 text-[13.5px] leading-relaxed shadow-sm min-w-0 overflow-x-auto">
                                             <MarkdownRenderer content={msg.content.trimEnd()} onOptionSelect={onOptionSelect} />
                                         </div>
                                         <div className="flex items-center gap-2 mt-0.5 pl-1 opacity-0 group-hover:opacity-100 transition-opacity">

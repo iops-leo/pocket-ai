@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ArrowLeft, Loader2, WifiOff, ClipboardPaste, History, ArrowUp, SlidersHorizontal, Network, Pencil, Trash2 } from 'lucide-react';
-import { ChatSettingsPanel, type ChatSettings } from './ChatSettingsPanel';
+import { ChatSettingsPanel, type ChatSettings, type PermissionMode, type ModelSetting } from './ChatSettingsPanel';
 import { SlashCommandDropdown, type SlashCommand } from './SlashCommandDropdown';
 import { io, Socket } from 'socket.io-client';
 import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt, unwrapSessionKey, type EncryptedData } from '@pocket-ai/wire';
@@ -172,6 +172,13 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                             loadMessageHistoryRef.current(sessionKeyRef.current, { silent: hasWarmCacheRef.current });
                             setIsConnecting(false);
                             setIsDisconnected(false);
+
+                            // CLI에 현재 설정 동기화 요청
+                            try {
+                                const getSettingsCmd = JSON.stringify({ t: 'control-command', command: 'get-settings' });
+                                const encCmd = await encrypt(getSettingsCmd, sessionKeyRef.current);
+                                socket.emit('update', { sessionId, sender: 'pwa', body: encCmd });
+                            } catch { /* 비치명적 */ }
                         } catch (e) {
                             console.error('[Pocket AI] Session key unwrap 실패:', e);
                             sessionKeyRef.current = sharedSecretRef.current;
@@ -312,6 +319,21 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                                 ? { ...m, output: msg.result, status: (msg.error ? 'error' : 'done') as 'error' | 'done', error: msg.error }
                                 : m
                         ));
+                    }
+
+                    // CLI → PWA: 현재 설정 동기화
+                    if (msg.t === 'settings-sync') {
+                        const modelMap: Record<string, ModelSetting> = {
+                            'claude-sonnet-4-5': 'adaptive',
+                            'claude-sonnet-4-6': 'sonnet',
+                            'claude-opus-4-6': 'opus',
+                        };
+                        setChatSettings({
+                            permissionMode: (msg.permissionMode || 'default') as PermissionMode,
+                            model: modelMap[msg.model] || 'default',
+                            builtinWorkers: msg.builtinWorkers || { gemini: true, codex: true, aider: true },
+                            customWorkers: msg.customWorkers || [],
+                        });
                     }
 
                     // Claude JSON 스트리밍: 권한 프롬프트 / 선택지 요청

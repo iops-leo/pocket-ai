@@ -149,7 +149,7 @@ function MarkdownBlock({ content }: { content: string }) {
                     if (isInline) {
                         return (
                             <code
-                                className="px-1.5 py-0.5 rounded bg-gray-700/60 text-orange-300 text-[13px] font-mono"
+                                className="px-1.5 py-0.5 rounded bg-gray-700/60 text-orange-300 text-[13px] font-mono break-all"
                                 {...props}
                             >
                                 {children}

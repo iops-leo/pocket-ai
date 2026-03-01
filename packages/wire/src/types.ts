@@ -48,8 +48,17 @@ export interface SessionMessageInputResponse {
 /** PWA에서 CLI 동작을 원격 제어 (퍼미션 모드, 모델 변경 등) */
 export interface SessionMessageControlCommand {
     t: 'control-command';
-    command: 'set-permission-mode' | 'set-model';
-    value: string;
+    command: 'set-permission-mode' | 'set-model' | 'set-workers' | 'set-builtin-workers' | 'get-settings';
+    value?: string;
+}
+
+/** CLI → PWA 현재 설정 동기화 응답 */
+export interface SessionMessageSettingsSync {
+    t: 'settings-sync';
+    permissionMode: string;
+    model: string;
+    builtinWorkers: { gemini: boolean; codex: boolean; aider: boolean };
+    customWorkers: Array<{ name: string; binary: string; description: string }>;
 }
 
 export type SessionPayload =
@@ -59,7 +68,8 @@ export type SessionPayload =
     | SessionEventMessage
     | SessionMessageInputRequest
     | SessionMessageInputResponse
-    | SessionMessageControlCommand;
+    | SessionMessageControlCommand
+    | SessionMessageSettingsSync;
 
 /**
  * Standard REST API response format.

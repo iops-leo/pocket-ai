@@ -147,6 +147,16 @@ function saveWorkers(workers: Array<{ name: string; binary: string; description:
   fs.renameSync(tmpPath, WORKERS_FILE);
 }
 
+function loadWorkers(): Array<{ name: string; binary: string; description: string }> {
+  try {
+    if (fs.existsSync(WORKERS_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(WORKERS_FILE, 'utf-8'));
+      return Array.isArray(parsed) ? parsed : [];
+    }
+  } catch { /* 파싱 실패 시 빈 배열 */ }
+  return [];
+}
+
 /**
  * AI CLI 세션 시작 (Happy 스타일 심플 래퍼)
  */
@@ -542,6 +552,21 @@ export async function startSession(command: string = 'claude', options: StartOpt
             } catch (err: any) {
               console.error('[Pocket AI] worker 저장 실패:', err.message);
             }
+          } else if (cmd.command === 'get-settings') {
+            // PWA 접속/재접속 시 현재 설정 동기화
+            const currentSettings = {
+              t: 'settings-sync',
+              permissionMode: bridge.getPermissionMode(),
+              model: 'default',
+              builtinWorkers: loadConfig().builtinWorkers,
+              customWorkers: loadWorkers(),
+            };
+            encrypt(JSON.stringify(currentSettings), sessionKey)
+              .then((encrypted) => {
+                socket!.emit('update', { sessionId, sender: 'cli', body: encrypted });
+                console.log('[Pocket AI] 현재 설정 PWA에 동기화 완료');
+              })
+              .catch(() => { });
           } else if ((cmd.command as string) === 'set-builtin-workers') {
             const workers = (cmd as any).workers as { gemini?: boolean; codex?: boolean; aider?: boolean };
             try {
