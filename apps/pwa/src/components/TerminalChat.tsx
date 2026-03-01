@@ -47,7 +47,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
 
     // 새 상태
     const [thinkingSeconds, setThinkingSeconds] = useState(0);
-    const [thinkingTokens, setThinkingTokens] = useState(0);
     const [isRenaming, setIsRenaming] = useState(false);
     const [renameValue, setRenameValue] = useState('');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -67,6 +66,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
     const socketRef = useRef<Socket | null>(null);
     const lastSeqRef = useRef<number | undefined>(undefined);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const isComposingRef = useRef(false);
     // 일시적 disconnect(초기 로딩 등)에서 오버레이 번쩍임 방지용 grace period 타이머
     const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const historyLoadedRef = useRef(false);
@@ -272,10 +272,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                         if (msg.event === 'thinking-start') {
                             setIsAiThinking(true);
                         }
-                        if (msg.event === 'usage' && msg.data) {
-                            const tokens = (msg.data as { outputTokens?: number }).outputTokens;
-                            if (tokens) setThinkingTokens(tokens);
-                        }
                     }
 
                     if (msg.t === 'text') {
@@ -398,7 +394,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
         // 슬래시 드롭다운이 열려 있으면 키보드 이벤트는 드롭다운이 처리
         if (showSlashDropdown) return;
 
-        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+        if (e.key === 'Enter' && !e.shiftKey && !isComposingRef.current) {
             e.preventDefault();
             handleSend();
         }
@@ -546,7 +542,6 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
 
         setIsAiThinking(true);
         setThinkingSeconds(0);
-        setThinkingTokens(0);
         setMessages(prev => [...prev, {
             kind: 'text',
             id: crypto.randomUUID(),
@@ -776,7 +771,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                     </div>
                 )}
 
-                <MessageList messages={messages} isAiThinking={isAiThinking} onOptionSelect={handleOptionSelect} onPermissionResponse={handlePermissionResponse} thinkingSeconds={thinkingSeconds} thinkingTokens={thinkingTokens} />
+                <MessageList messages={messages} isAiThinking={isAiThinking} onOptionSelect={handleOptionSelect} onPermissionResponse={handlePermissionResponse} thinkingSeconds={thinkingSeconds} />
 
                 {/* 입력 영역 */}
                 <div className="flex-none bg-gray-950 w-full border-t border-gray-800/60 relative">
@@ -815,6 +810,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                                     }
                                 }}
                                 onKeyDown={handleKeyDown}
+                                onCompositionStart={() => { isComposingRef.current = true; }}
+                                onCompositionEnd={() => { isComposingRef.current = false; }}
                                 placeholder={t('inputPlaceholder')}
                                 className="bg-transparent text-gray-100 placeholder-gray-500 outline-none resize-none text-[16px] leading-relaxed px-4 pt-3 pb-2 min-h-[26px] max-h-40 overflow-y-auto w-full"
                                 autoComplete="off"

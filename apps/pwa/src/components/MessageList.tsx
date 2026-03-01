@@ -53,13 +53,12 @@ function CopyButton({ text }: { text: string }) {
 
 const THINKING_PHRASES = ['생각하는 중', '분석하는 중', '코드 작성 중', '처리하는 중', '답변 작성 중'];
 
-function ThinkingIndicator({ seconds, tokens }: { seconds: number; tokens: number }) {
+function ThinkingIndicator({ seconds }: { seconds: number }) {
     const phraseIndex = Math.floor(seconds / 3) % THINKING_PHRASES.length;
     const phrase = THINKING_PHRASES[phraseIndex];
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${seconds}s`;
-    const tokenStr = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : `${tokens}`;
 
     return (
         <div className="flex justify-start px-3">
@@ -69,9 +68,6 @@ function ThinkingIndicator({ seconds, tokens }: { seconds: number; tokens: numbe
                     <span className="text-sm text-gray-300">{phrase}…</span>
                     {seconds > 0 && (
                         <span className="text-xs text-gray-500 font-mono">{timeStr}</span>
-                    )}
-                    {tokens > 0 && (
-                        <span className="text-xs text-gray-600 font-mono">· ↓ {tokenStr} tokens</span>
                     )}
                 </div>
             </div>
@@ -179,10 +175,9 @@ interface MessageListProps {
     onOptionSelect?: (option: string) => void;
     onPermissionResponse?: (requestId: string, approved: boolean) => void;
     thinkingSeconds?: number;
-    thinkingTokens?: number;
 }
 
-export function MessageList({ messages, isAiThinking, onOptionSelect, onPermissionResponse, thinkingSeconds = 0, thinkingTokens = 0 }: MessageListProps) {
+export function MessageList({ messages, isAiThinking, onOptionSelect, onPermissionResponse, thinkingSeconds = 0 }: MessageListProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -288,7 +283,7 @@ export function MessageList({ messages, isAiThinking, onOptionSelect, onPermissi
                             />
                         );
                     })}
-                    {isAiThinking && <ThinkingIndicator seconds={thinkingSeconds} tokens={thinkingTokens} />}
+                    {isAiThinking && <ThinkingIndicator seconds={thinkingSeconds} />}
                     <div ref={bottomRef} />
                 </div>
             </div>
