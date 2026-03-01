@@ -172,16 +172,19 @@ function PermissionCard({ msg, onResponse }: { msg: PermissionMsg; onResponse?: 
 interface MessageListProps {
     messages: ChatMessage[];
     isAiThinking?: boolean;
+    isHistoryLoading?: boolean;
     onOptionSelect?: (option: string) => void;
     onPermissionResponse?: (requestId: string, approved: boolean) => void;
     thinkingSeconds?: number;
 }
 
-export function MessageList({ messages, isAiThinking, onOptionSelect, onPermissionResponse, thinkingSeconds = 0 }: MessageListProps) {
+export function MessageList({ messages, isAiThinking, isHistoryLoading, onOptionSelect, onPermissionResponse, thinkingSeconds = 0 }: MessageListProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     const isNearBottomRef = useRef(true);
+
+    const isInitialScrollRef = useRef(true);
 
     const scrollToBottom = useCallback(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -197,9 +200,11 @@ export function MessageList({ messages, isAiThinking, onOptionSelect, onPermissi
 
     useEffect(() => {
         if (isNearBottomRef.current) {
-            bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+            const behavior = (isInitialScrollRef.current || isHistoryLoading) ? 'instant' : 'smooth';
+            bottomRef.current?.scrollIntoView({ behavior });
+            isInitialScrollRef.current = false;
         }
-    }, [messages, isAiThinking]);
+    }, [messages, isAiThinking, isHistoryLoading]);
 
     if (messages.length === 0 && !isAiThinking) {
         return <EmptyState />;

@@ -776,7 +776,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                     </div>
                 )}
 
-                <MessageList messages={messages} isAiThinking={isAiThinking} onOptionSelect={handleOptionSelect} onPermissionResponse={handlePermissionResponse} thinkingSeconds={thinkingSeconds} />
+                <MessageList messages={messages} isAiThinking={isAiThinking} isHistoryLoading={isLoadingHistory} onOptionSelect={handleOptionSelect} onPermissionResponse={handlePermissionResponse} thinkingSeconds={thinkingSeconds} />
 
                 {/* 입력 영역 */}
                 <div className="flex-none bg-gray-950 w-full border-t border-gray-800/60 relative">
