@@ -105,7 +105,8 @@
     "deleteSessionSuccess": "Session deleted",
     "deleteSessionFailed": "Failed to delete session",
     "renameSessionFailed": "Failed to rename session",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "installApp": "Install App"
   },
   "settings": {
     "title": "Settings",

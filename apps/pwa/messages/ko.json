@@ -105,7 +105,8 @@
     "deleteSessionSuccess": "세션이 삭제되었습니다",
     "deleteSessionFailed": "세션 삭제에 실패했습니다",
     "renameSessionFailed": "세션 이름 변경에 실패했습니다",
-    "cancel": "취소"
+    "cancel": "취소",
+    "installApp": "앱 설치 (홈 화면에 추가)"
   },
   "settings": {
     "title": "설정",

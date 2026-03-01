@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, Plus, ChevronLeft, FolderOpen, Settings, RefreshCw } from 'lucide-react';
+import { Search, Plus, ChevronLeft, FolderOpen, Settings, RefreshCw, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { usePwaInstall } from '@/hooks/usePwaInstall';
 
 interface Session {
     sessionId: string;
@@ -65,6 +66,7 @@ export function SessionSidebar({
     const [searchQuery, setSearchQuery] = useState('');
     const [engineFilter, setEngineFilter] = useState<string>('all');
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const { isInstallable, promptInstall } = usePwaInstall();
 
     const handleRefresh = async () => {
         if (!onRefresh || isRefreshing) return;
@@ -150,6 +152,16 @@ export function SessionSidebar({
                 >
                     <Settings size={20} />
                 </Link>
+
+                {isInstallable && (
+                    <button
+                        onClick={promptInstall}
+                        className="p-2 text-yellow-400 hover:text-yellow-300 hover:bg-gray-800 rounded-lg transition-colors mt-2 ring-1 ring-yellow-400/30 bg-yellow-400/10 shadow-[0_0_10px_rgba(250,204,21,0.2)]"
+                        title={t('installApp')}
+                    >
+                        <Download size={20} />
+                    </button>
+                )}
             </div>
         );
     }
@@ -276,6 +288,16 @@ export function SessionSidebar({
                     <Settings size={16} />
                     {t('settings')}
                 </Link>
+
+                {isInstallable && (
+                    <button
+                        onClick={promptInstall}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 mt-2 text-yellow-400 hover:text-yellow-300 hover:bg-gray-800 rounded-xl text-sm font-medium transition-all ring-1 ring-yellow-400/30 bg-yellow-400/10 shadow-[0_0_10px_rgba(250,204,21,0.2)]"
+                    >
+                        <Download size={16} />
+                        {t('installApp')}
+                    </button>
+                )}
             </div>
         </div>
     );
