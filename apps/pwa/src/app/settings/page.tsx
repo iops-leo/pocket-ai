@@ -60,7 +60,7 @@ export default function SettingsPage() {
 
     const handleLogout = () => {
         localStorage.removeItem('pocket_ai_token');
-        router.replace('/login');
+        router.replace('/');
     };
 
     return (

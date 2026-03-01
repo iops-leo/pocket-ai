@@ -65,8 +65,13 @@ function LoginContent() {
 
     const handleLogin = () => {
         const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-        // 같은 탭에서 이동 (가장 호환성 높은 방식)
-        window.location.href = `${serverUrl}/auth/github`;
+        const authUrl = `${serverUrl}/auth/github`;
+        // 팝업으로 열기 (BroadcastChannel로 원래 창에서 dashboard 이동)
+        const popup = window.open(authUrl, 'github_oauth', 'width=600,height=700,left=400,top=100');
+        if (!popup) {
+            // 팝업 차단된 경우 fallback: 같은 탭에서 이동
+            window.location.href = authUrl;
+        }
     };
 
     if (isProcessingToken) {
