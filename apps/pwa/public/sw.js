@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pocket-ai-v1';
+const CACHE_NAME = 'pocket-ai-v2';
 const STATIC_ASSETS = [
   '/',
   '/login',
