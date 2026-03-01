@@ -808,7 +808,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                                     const val = e.target.value;
                                     setInputValue(val);
                                     adjustTextareaHeight();
-                                    if (val.startsWith('/') && slashCommands.length > 0) {
+                                    if (val.startsWith('/') && !val.includes(' ') && slashCommands.length > 0) {
                                         setShowSlashDropdown(true);
                                     } else {
                                         setShowSlashDropdown(false);
