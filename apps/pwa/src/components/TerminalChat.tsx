@@ -533,12 +533,13 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
         }
     }, [isDisconnected, sessionId]);
 
-    const handleSend = async (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
+    const handleSend = async (e?: React.FormEvent | string) => {
+        if (e && typeof e !== 'string') e.preventDefault();
         const encryptKey = sessionKeyRef.current || sharedSecretRef.current;
-        if (!inputValue.trim() || !socketRef.current || !encryptKey || isDisconnected) return;
+        const overrideText = typeof e === 'string' ? e : undefined;
+        if (!(overrideText ?? inputValue).trim() || !socketRef.current || !encryptKey || isDisconnected) return;
 
-        const text = inputValue;
+        const text = overrideText ?? inputValue;
         setInputValue('');
         // 높이 초기화
         if (textareaRef.current) {
@@ -790,6 +791,11 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                                 setInputValue(cmd + ' ');
                                 setShowSlashDropdown(false);
                                 textareaRef.current?.focus();
+                            }}
+                            onSelectAndSend={(cmd) => {
+                                setInputValue('');
+                                setShowSlashDropdown(false);
+                                handleSend(cmd);
                             }}
                             onClose={() => setShowSlashDropdown(false)}
                             visible={showSlashDropdown}

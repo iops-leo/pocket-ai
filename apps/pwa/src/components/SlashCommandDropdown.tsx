@@ -13,6 +13,7 @@ interface SlashCommandDropdownProps {
     commands: SlashCommand[];
     inputValue: string;
     onSelect: (command: string) => void;
+    onSelectAndSend: (command: string) => void;
     onClose: () => void;
     visible: boolean;
 }
@@ -37,6 +38,7 @@ export function SlashCommandDropdown({
     commands,
     inputValue,
     onSelect,
+    onSelectAndSend,
     onClose,
     visible,
 }: SlashCommandDropdownProps) {
@@ -86,7 +88,7 @@ export function SlashCommandDropdown({
                     e.preventDefault();
                     e.stopPropagation();
                     if (filtered[selectedIndex]) {
-                        onSelect('/' + filtered[selectedIndex].name);
+                        onSelectAndSend('/' + filtered[selectedIndex].name);
                     }
                 }
                 break;
