@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Terminal, Loader2, Menu } from 'lucide-react';
 import { TerminalChat } from '@/components/TerminalChat';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { SessionSidebar } from '@/components/SessionSidebar';
 import { NewSessionModal } from '@/components/NewSessionModal';
 import { io, Socket } from 'socket.io-client';
@@ -436,18 +437,24 @@ export default function DashboardPage() {
                 {/* 한 번 마운트된 세션은 언마운트하지 않고 CSS로 show/hide (소켓 재연결 방지) */}
                 {mountedSessions.map(sessionId => (
                     <div key={sessionId} className={activeSession === sessionId ? 'contents' : 'hidden'}>
-                        <TerminalChat
-                            sessionId={sessionId}
-                            onBack={() => {
-                                setActiveSession(null);
-                                if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-                                    setIsMobileSidebarOpen(true);
-                                }
-                            }}
-                            embedded={true}
-                            onRenameSession={(name) => handleRenameSession(sessionId, name)}
-                            onDeleteSession={() => handleDeleteSession(sessionId)}
-                        />
+                        <ErrorBoundary onReset={() => {
+                            // 에러 후 재마운트를 위해 잠깐 unmount
+                            setMountedSessions(prev => prev.filter(s => s !== sessionId));
+                            setTimeout(() => setMountedSessions(prev => [...prev, sessionId]), 100);
+                        }}>
+                            <TerminalChat
+                                sessionId={sessionId}
+                                onBack={() => {
+                                    setActiveSession(null);
+                                    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                                        setIsMobileSidebarOpen(true);
+                                    }
+                                }}
+                                embedded={true}
+                                onRenameSession={(name) => handleRenameSession(sessionId, name)}
+                                onDeleteSession={() => handleDeleteSession(sessionId)}
+                            />
+                        </ErrorBoundary>
                     </div>
                 ))}
                 {!activeSession && (
