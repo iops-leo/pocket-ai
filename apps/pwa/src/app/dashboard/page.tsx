@@ -51,6 +51,8 @@ export default function DashboardPage() {
     const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
     const socketRef = useRef<Socket | null>(null);
     const hasAutoOpenedMobileSidebar = useRef(false);
+    const pendingAutoSelectRef = useRef(false);
+    const sessionsBeforeCreateRef = useRef<Set<string>>(new Set());
 
     const showToast = useCallback((message: string, type: 'error' | 'success' = 'error') => {
         setToast({ message, type });
@@ -178,6 +180,16 @@ export default function DashboardPage() {
         };
     }, [fetchSessions, fetchRecentPaths]);
 
+    // 새 세션 생성 후 자동 포커스
+    useEffect(() => {
+        if (!pendingAutoSelectRef.current) return;
+        const newSession = sessions.find(s => !sessionsBeforeCreateRef.current.has(s.sessionId));
+        if (newSession) {
+            pendingAutoSelectRef.current = false;
+            handleSelectSession(newSession.sessionId);
+        }
+    }, [sessions]); // eslint-disable-line react-hooks/exhaustive-deps
+
     useEffect(() => {
         if (hasAutoOpenedMobileSidebar.current) return;
         if (typeof window === 'undefined') return;
@@ -258,6 +270,9 @@ export default function DashboardPage() {
             ];
             return next.slice(0, 8);
         });
+        // 현재 세션 목록 스냅샷 저장 후 자동 포커스 대기
+        sessionsBeforeCreateRef.current = new Set(sessions.map(s => s.sessionId));
+        pendingAutoSelectRef.current = true;
         await fetchSessions(false);
     };
 
