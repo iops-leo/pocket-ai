@@ -26,6 +26,12 @@ type SessionMeta = {
 
 const sessionUiCache = new Map<string, { messages: ChatMessage[]; sessionMeta: SessionMeta }>();
 
+function makeKeyReadySignal() {
+    let res: () => void;
+    const promise = new Promise<void>(r => { res = r; });
+    return { promise, resolve: () => res() };
+}
+
 export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSession, onDeleteSession }: TerminalChatProps) {
     const t = useTranslations('chat');
     const [isConnecting, setIsConnecting] = useState(true);
@@ -71,6 +77,8 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const initConnectionRef = useRef<(socket: any) => Promise<void>>(async () => { });
     const prevThinkingRef = useRef(false);
+    // 세션키 준비 신호: 재연결 시 update 이벤트가 session-key 처리 전에 도착하는 레이스 컨디션 방지
+    const keyReadyRef = useRef(makeKeyReadySignal());
 
     // 시스템 에러 자동 해제 (8초)
     useEffect(() => {
@@ -130,6 +138,9 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
         const token = localStorage.getItem('pocket_ai_token');
         if (!token) return;
 
+        // 재연결 시 keyReady 신호 리셋
+        keyReadyRef.current = makeKeyReadySignal();
+
         try {
             const keyPair = await generateECDHKeyPair();
             const pubBase64 = await exportPublicKey(keyPair.publicKey);
@@ -156,12 +167,14 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                         try {
                             if (!sharedSecretRef.current) throw new Error('No shared secret');
                             sessionKeyRef.current = await unwrapSessionKey(skPayload.wrappedKey, sharedSecretRef.current);
+                            keyReadyRef.current.resolve(); // update 이벤트 대기 해제
                             loadMessageHistoryRef.current(sessionKeyRef.current, { silent: hasWarmCacheRef.current });
                             setIsConnecting(false);
                             setIsDisconnected(false);
                         } catch (e) {
                             console.error('[Pocket AI] Session key unwrap 실패:', e);
                             sessionKeyRef.current = sharedSecretRef.current;
+                            keyReadyRef.current.resolve(); // 실패해도 대기 해제
                             loadMessageHistoryRef.current(sharedSecretRef.current!, { silent: hasWarmCacheRef.current });
                             setIsConnecting(false);
                             setIsDisconnected(false);
@@ -171,6 +184,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                     setTimeout(() => {
                         if (!sessionKeyRef.current && sharedSecretRef.current) {
                             sessionKeyRef.current = sharedSecretRef.current;
+                            keyReadyRef.current.resolve(); // 타임아웃 fallback도 대기 해제
                             loadMessageHistoryRef.current(sharedSecretRef.current!, { silent: hasWarmCacheRef.current });
                             setIsConnecting(false);
                             setIsDisconnected(false);
@@ -222,6 +236,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
             sharedSecretRef.current = null;
             sessionKeyRef.current = null;
             historyLoadedRef.current = false; // 재연결 시 새 메시지 다시 로드
+            keyReadyRef.current.resolve(); // 대기 중인 update 핸들러 unblock (key 없이 처리 → 무시됨)
             // 1.5초 grace period: 빠른 재연결 시 오버레이 표시 안 함
             disconnectTimerRef.current = setTimeout(() => {
                 setIsDisconnected(true);
@@ -230,6 +245,10 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         socket.on('update', async (payload: any) => {
+            // session-key 처리 전에 update가 먼저 도착하는 레이스 컨디션 방지
+            if (payload.sender === 'cli' && !sessionKeyRef.current) {
+                await keyReadyRef.current.promise;
+            }
             const decryptKey = sessionKeyRef.current || sharedSecretRef.current;
             if (payload.sender === 'cli' && payload.body && decryptKey) {
                 try {

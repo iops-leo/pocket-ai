@@ -394,6 +394,8 @@ export async function startSession(command: string = 'claude', options: StartOpt
             }
           }
 
+          // PWA가 session-key를 처리할 시간 확보 (레이스 컨디션 방지)
+          await new Promise(resolve => setTimeout(resolve, 300));
           // PWA 재연결 시 로컬 이력 전송
           await pushHistoryToPwa();
         } catch (err) {
