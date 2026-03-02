@@ -11,6 +11,7 @@ interface SessionKeys {
 
 interface PocketAIConfig {
   token?: string;
+  refreshToken?: string;
   serverUrl: string;
   // 세션별 키 저장 (cwd 해시 → 키쌍)
   sessionKeys?: Record<string, SessionKeys>;
@@ -38,6 +39,18 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   config.delete('token');
+}
+
+export function getRefreshToken(): string | undefined {
+  return config.get('refreshToken');
+}
+
+export function setRefreshToken(token: string): void {
+  config.set('refreshToken', token);
+}
+
+export function clearRefreshToken(): void {
+  config.delete('refreshToken');
 }
 
 export function getServerUrl(): string {

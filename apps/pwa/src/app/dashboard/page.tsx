@@ -10,6 +10,7 @@ import { NewSessionModal } from '@/components/NewSessionModal';
 import { io, Socket } from 'socket.io-client';
 import { useTranslations } from 'next-intl';
 import { generateECDHKeyPair, exportPublicKey } from '@pocket-ai/wire';
+import { fetchWithAuth, clearTokens, getToken } from '@/lib/auth';
 
 interface Session {
     sessionId: string;
@@ -61,8 +62,7 @@ export default function DashboardPage() {
     }, []);
 
     const fetchSessions = useCallback(async (showLoader = true) => {
-        const token = localStorage.getItem('pocket_ai_token');
-        if (!token) {
+        if (!getToken()) {
             router.replace('/login');
             return;
         }
@@ -72,14 +72,10 @@ export default function DashboardPage() {
             if (showLoader) setIsLoading(true);
 
             const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-            const res = await fetch(`${serverUrl}/api/sessions`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
+            const res = await fetchWithAuth(`${serverUrl}/api/sessions`);
 
             if (res.status === 401) {
-                localStorage.removeItem('pocket_ai_token');
+                clearTokens();
                 router.replace('/login');
                 return;
             }
@@ -98,16 +94,11 @@ export default function DashboardPage() {
     }, [router, t]);
 
     const fetchRecentPaths = useCallback(async () => {
-        const token = localStorage.getItem('pocket_ai_token');
-        if (!token) return;
+        if (!getToken()) return;
 
         try {
             const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-            const res = await fetch(`${serverUrl}/api/sessions/recent-paths?limit=8`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
+            const res = await fetchWithAuth(`${serverUrl}/api/sessions/recent-paths?limit=8`);
 
             if (!res.ok) return;
 
@@ -144,7 +135,7 @@ export default function DashboardPage() {
         fetchSessions(true);
         fetchRecentPaths();
 
-        const token = localStorage.getItem('pocket_ai_token');
+        const token = getToken();
         if (!token) return;
 
         const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -159,7 +150,8 @@ export default function DashboardPage() {
         socket.on('connect', () => {
             console.log('Real-time updates connected');
             // 사용자 룸 가입 → session-online/offline 실시간 수신
-            socket.emit('pwa-dashboard-auth', { token });
+            const currentToken = getToken();
+            socket.emit('pwa-dashboard-auth', { token: currentToken || token });
         });
 
         socket.on('session-offline', ({ sessionId }: { sessionId: string }) => {
@@ -208,8 +200,7 @@ export default function DashboardPage() {
     };
 
     const handleNewSession = async (data: { cwd: string; engine: string; sessionName?: string }) => {
-        const token = localStorage.getItem('pocket_ai_token');
-        if (!token) {
+        if (!getToken()) {
             router.replace('/login');
             throw new Error(t('createFailed'));
         }
@@ -226,11 +217,10 @@ export default function DashboardPage() {
         const publicKey = await exportPublicKey(keyPair.publicKey);
         const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-        const res = await fetch(`${serverUrl}/api/sessions`, {
+        const res = await fetchWithAuth(`${serverUrl}/api/sessions`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
                 publicKey,
@@ -246,7 +236,7 @@ export default function DashboardPage() {
         });
 
         if (res.status === 401) {
-            localStorage.removeItem('pocket_ai_token');
+            clearTokens();
             router.replace('/login');
             throw new Error(t('createFailed'));
         }
@@ -278,8 +268,7 @@ export default function DashboardPage() {
     };
 
     const handleRenameSession = async (sessionId: string, sessionName: string) => {
-        const token = localStorage.getItem('pocket_ai_token');
-        if (!token) {
+        if (!getToken()) {
             router.replace('/login');
             return;
         }
@@ -289,11 +278,10 @@ export default function DashboardPage() {
 
         try {
             const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-            const res = await fetch(`${serverUrl}/api/sessions/${sessionId}`, {
+            const res = await fetchWithAuth(`${serverUrl}/api/sessions/${sessionId}`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify({
                     metadata: {
@@ -303,7 +291,7 @@ export default function DashboardPage() {
             });
 
             if (res.status === 401) {
-                localStorage.removeItem('pocket_ai_token');
+                clearTokens();
                 router.replace('/login');
                 return;
             }
@@ -328,23 +316,19 @@ export default function DashboardPage() {
     };
 
     const handleDeleteSession = async (sessionId: string) => {
-        const token = localStorage.getItem('pocket_ai_token');
-        if (!token) {
+        if (!getToken()) {
             router.replace('/login');
             return;
         }
 
         try {
             const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-            const res = await fetch(`${serverUrl}/api/sessions/${sessionId}`, {
+            const res = await fetchWithAuth(`${serverUrl}/api/sessions/${sessionId}`, {
                 method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             });
 
             if (res.status === 401) {
-                localStorage.removeItem('pocket_ai_token');
+                clearTokens();
                 router.replace('/login');
                 return;
             }

@@ -1,5 +1,31 @@
 import { io, Socket } from 'socket.io-client';
-import { getServerUrl, getToken } from '../config.js';
+import { getServerUrl, getToken, setToken, getRefreshToken, setRefreshToken, clearToken, clearRefreshToken } from '../config.js';
+
+async function tryRefreshToken(): Promise<string | null> {
+  const serverUrl = getServerUrl();
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  try {
+    const res = await fetch(`${serverUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (data.token && data.refreshToken) {
+      setToken(data.token);
+      setRefreshToken(data.refreshToken);
+      return data.token;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export interface ConnectOptions {
   sessionId: string;
@@ -62,6 +88,25 @@ export function connectToServer(options: ConnectOptions): Socket {
         console.error('[Pocket AI] 세션 재등록 실패:', err.message);
         options.onAuthError(data);
       }
+    } else if (data.error === 'Token expired') {
+      // 토큰 만료 → refresh token으로 자동 갱신 시도
+      console.log('\n[Pocket AI] 토큰이 만료되었습니다. 자동 갱신 중...');
+      const newToken = await tryRefreshToken();
+      if (newToken) {
+        console.log('[Pocket AI] 토큰 갱신 성공. 재연결합니다...');
+        // 갱신된 토큰으로 재인증
+        socket.emit('client-auth', {
+          sessionId: currentSessionId,
+          token: newToken,
+          publicKey: options.publicKey,
+          metadata: options.metadata,
+        });
+      } else {
+        console.error('\n[Pocket AI] 토큰 갱신 실패. 다시 로그인해주세요: pocket-ai login');
+        clearToken();
+        clearRefreshToken();
+        options.onAuthError(data);
+      }
     } else {
       options.onAuthError(data);
     }
@@ -101,6 +146,26 @@ export async function registerSession(publicKey: string, metadata: Record<string
     },
     body: JSON.stringify({ publicKey, metadata }),
   });
+
+  if (res.status === 401) {
+    // 토큰 만료 → refresh 시도 후 재요청
+    const newToken = await tryRefreshToken();
+    if (newToken) {
+      const retryRes = await fetch(`${serverUrl}/api/sessions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${newToken}`,
+        },
+        body: JSON.stringify({ publicKey, metadata }),
+      });
+      if (retryRes.ok) {
+        const retryData = await retryRes.json();
+        return retryData.data.sessionId;
+      }
+    }
+    throw new Error('Failed to register session: Token expired and refresh failed');
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Unknown error' }));

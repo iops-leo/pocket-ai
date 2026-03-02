@@ -112,8 +112,9 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                 } else {
                     socket.emit('auth-error', { error: 'Invalid session or ownership' });
                 }
-            } catch (err) {
-                socket.emit('auth-error', { error: 'Invalid token' });
+            } catch (err: any) {
+                const isExpired = err?.code === 'FAST_JWT_EXPIRED' || err?.message?.includes('expired');
+                socket.emit('auth-error', { error: isExpired ? 'Token expired' : 'Invalid token' });
             }
         });
 
@@ -129,8 +130,9 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                 socket.join(`user_${decoded.sub}`);
                 socket.emit('dashboard-auth-success');
                 fastify.log.info(`Dashboard socket ${socket.id} joined user_${decoded.sub}`);
-            } catch {
-                socket.emit('dashboard-auth-error', { error: 'Invalid token' });
+            } catch (err: any) {
+                const isExpired = err?.code === 'FAST_JWT_EXPIRED' || err?.message?.includes('expired');
+                socket.emit('dashboard-auth-error', { error: isExpired ? 'Token expired' : 'Invalid token' });
             }
         });
 
@@ -177,8 +179,9 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                 } else {
                     socket.emit('join-error', { error: 'Session offline or unauthorized' });
                 }
-            } catch {
-                socket.emit('join-error', { error: 'Invalid token' });
+            } catch (err: any) {
+                const isExpired = err?.code === 'FAST_JWT_EXPIRED' || err?.message?.includes('expired');
+                socket.emit('join-error', { error: isExpired ? 'Token expired' : 'Invalid token' });
             }
         });
 

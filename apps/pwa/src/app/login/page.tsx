@@ -13,16 +13,20 @@ function LoginContent() {
     const t = useTranslations('login');
 
     useEffect(() => {
-        // OAuth callback - store token
+        // OAuth callback - store token + refresh token
         const token = searchParams.get('token');
+        const refreshToken = searchParams.get('refreshToken');
         if (token) {
             setIsProcessingToken(true);
             localStorage.setItem('pocket_ai_token', token);
+            if (refreshToken) {
+                localStorage.setItem('pocket_ai_refresh_token', refreshToken);
+            }
 
             // 팝업/새탭에서 열린 경우: 원래 탭에 알리고 이 창 닫기
             try {
                 const bc = new BroadcastChannel('pocket_ai_auth');
-                bc.postMessage({ type: 'login_success', token });
+                bc.postMessage({ type: 'login_success', token, refreshToken });
                 bc.close();
             } catch {
                 // BroadcastChannel 미지원 브라우저 (fallback: 그냥 redirect)
@@ -45,6 +49,13 @@ function LoginContent() {
             bc = new BroadcastChannel('pocket_ai_auth');
             bc.onmessage = (event) => {
                 if (event.data?.type === 'login_success') {
+                    // 팝업에서 전달된 토큰 저장 (이 탭에서도 사용 가능하도록)
+                    if (event.data.token) {
+                        localStorage.setItem('pocket_ai_token', event.data.token);
+                    }
+                    if (event.data.refreshToken) {
+                        localStorage.setItem('pocket_ai_refresh_token', event.data.refreshToken);
+                    }
                     bc?.close();
                     router.replace('/dashboard');
                 }

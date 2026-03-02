@@ -8,6 +8,7 @@ import { io, Socket } from 'socket.io-client';
 import { generateECDHKeyPair, deriveSharedSecret, importPublicKey, exportPublicKey, encrypt, decrypt, unwrapSessionKey, type EncryptedData } from '@pocket-ai/wire';
 import { MessageList, type ChatMessage } from './MessageList';
 import { useTranslations } from 'next-intl';
+import { getToken, tryRefreshToken, clearTokens } from '@/lib/auth';
 
 interface TerminalChatProps {
     sessionId: string;
@@ -136,7 +137,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const initConnection = useCallback(async (socket: Socket) => {
-        const token = localStorage.getItem('pocket_ai_token');
+        const token = getToken();
         if (!token) return;
 
         // 재연결 시 keyReady 신호 리셋
@@ -206,7 +207,18 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
             });
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            socket.once('join-error', (err: any) => {
+            socket.once('join-error', async (err: any) => {
+                if (err.error === 'Token expired') {
+                    // 토큰 만료 → refresh 시도 후 재연결
+                    const newToken = await tryRefreshToken();
+                    if (newToken) {
+                        socket.emit('session-join', { sessionId, token: newToken });
+                        return;
+                    }
+                    clearTokens();
+                    window.location.href = '/login';
+                    return;
+                }
                 console.error('Failed to join session', err);
                 setSystemError(`세션 연결 실패: ${err.error ?? '세션이 오프라인 상태입니다.'}`);
                 setIsConnecting(false);

@@ -51,12 +51,22 @@ export interface MessageTable {
     created_at: Generated<Date>;
 }
 
+export interface RefreshTokenTable {
+    id: Generated<string>;
+    user_id: string;
+    token_hash: string;
+    expires_at: Date;
+    created_at: Generated<Date>;
+    revoked_at: Date | null;
+}
+
 export interface Database {
     users: UserTable;
     oauth_accounts: OAuthAccountTable;
     subscriptions: SubscriptionTable;
     sessions: SessionTable;
     messages: MessageTable;
+    refresh_tokens: RefreshTokenTable;
 }
 
 // Ensure you set DATABASE_URL in .env

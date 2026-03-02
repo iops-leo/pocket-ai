@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import open from 'open';
 import http from 'http';
 import { URL } from 'url';
-import { setToken, getServerUrl, getToken } from '../config.js';
+import { setToken, setRefreshToken, getServerUrl, getToken } from '../config.js';
 export const loginCommand = new Command('login')
     .description('GitHub OAuth로 로그인')
     .option('--server <url>', '서버 URL 지정')
@@ -17,8 +17,12 @@ export const loginCommand = new Command('login')
     const server = http.createServer(async (req, res) => {
         const url = new URL(req.url || '/', `http://localhost:${localPort}`);
         const token = url.searchParams.get('token');
+        const refreshTokenParam = url.searchParams.get('refreshToken');
         if (token) {
             setToken(token);
+            if (refreshTokenParam) {
+                setRefreshToken(refreshTokenParam);
+            }
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(`
           <html>

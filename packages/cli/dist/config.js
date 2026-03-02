@@ -19,6 +19,15 @@ export function setToken(token) {
 export function clearToken() {
     config.delete('token');
 }
+export function getRefreshToken() {
+    return config.get('refreshToken');
+}
+export function setRefreshToken(token) {
+    config.set('refreshToken', token);
+}
+export function clearRefreshToken() {
+    config.delete('refreshToken');
+}
 export function getServerUrl() {
     return process.env.POCKET_AI_SERVER || config.get('serverUrl');
 }

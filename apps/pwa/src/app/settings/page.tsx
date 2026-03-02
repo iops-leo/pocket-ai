@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useTranslations } from 'next-intl';
 import { useLocale } from '@/i18n/client';
+import { clearTokens } from '@/lib/auth';
 
 interface JwtPayload {
     sub: string;
@@ -39,6 +40,7 @@ export default function SettingsPage() {
     useEffect(() => {
         const storedToken = localStorage.getItem('pocket_ai_token');
         if (!storedToken) {
+            clearTokens();
             router.replace('/login');
             return;
         }
@@ -59,7 +61,7 @@ export default function SettingsPage() {
     };
 
     const handleLogout = () => {
-        localStorage.removeItem('pocket_ai_token');
+        clearTokens();
         router.replace('/');
     };
 
