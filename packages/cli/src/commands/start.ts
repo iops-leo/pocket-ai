@@ -11,6 +11,7 @@ import { SessionWatcher, getSessionDisplayName, isValidEngine, isPresetEngine, e
 import { createSessionTranscriptWatcher } from '../utils/session-watcher.js';
 import { collectSlashCommands } from '../utils/slash-commands.js';
 import { ClaudeStreamBridge } from '../utils/claude-stream.js';
+import { CodexSdkBridge } from '../utils/codex-sdk-bridge.js';
 import { PtyPromptDetector } from '../utils/pty-prompt-detector.js';
 import { fileURLToPath } from 'url';
 
@@ -304,6 +305,7 @@ export async function startSession(command: string = 'claude', options: StartOpt
 
   // Claude JSON 스트리밍은 프리셋 claude 엔진에서만 사용
   const useClaude = !isCustomEngine && engine === 'claude';
+  const useCodexSdk = !isCustomEngine && engine === 'codex';
   let socket: Socket | null = null;
   let sharedSecret: CryptoKey | null = null;
 
@@ -381,6 +383,7 @@ export async function startSession(command: string = 'claude', options: StartOpt
         if (data.error === 'Invalid token') {
           console.error('\n[Pocket AI] 토큰이 만료됐습니다. 다시 로그인해주세요: pocket-ai login\n');
           socket?.disconnect();
+          process.exit(1);
         }
       },
       onKeyExchange: async (data: { publicKey: string }) => {
@@ -641,9 +644,98 @@ export async function startSession(command: string = 'claude', options: StartOpt
     process.on('SIGINT', cleanup);
     process.on('SIGTERM', cleanup);
 
+  } else if (useCodexSdk) {
+    // ════════════════════════════════════════════════════
+    // Codex: SDK 기반 구조화된 이벤트 통신
+    // ════════════════════════════════════════════════════
+
+    const bridge = new CodexSdkBridge({
+      cwd,
+      headless,
+      onMessage: (event) => relayEvent(event),
+      onReady: () => {
+        relayEvent({ t: 'session-event', event: 'stopped-typing' });
+      },
+      onExit: (code) => {
+        console.log(`\nCodex 프로세스가 종료되었습니다 (code: ${code})`);
+        if (socket) socket.disconnect();
+        process.exit(code);
+      },
+    });
+
+    getIsAiThinking = () => !bridge.isWaitingForInput;
+    await bridge.start();
+
+    // 로컬 stdin → Codex (headless가 아닌 경우)
+    if (!headless) {
+      process.stdin.resume();
+      const rl = await import('readline');
+      const stdinRl = rl.createInterface({ input: process.stdin, output: process.stdout });
+      stdinRl.on('line', (line: string) => {
+        bridge.sendMessage(line);
+      });
+    }
+
+    // 서버 연결
+    if (options.remote !== false) {
+      socket = connectToServer(buildServerOptions((msg) => {
+        // PWA → Codex: 텍스트 메시지
+        if (msg.t === 'text') {
+          const text = (msg.text as string).replace(/[\r\n]+$/, '');
+          if (text) {
+            appendToHistory(sessionId, { t: 'text', text, role: 'user' });
+            bridge.sendMessage(text);
+          }
+        }
+        // PWA → Codex: 인터럽트 (응답 중단)
+        if (msg.t === 'session-event' && (msg as any).event === 'interrupt') {
+          bridge.interrupt();
+          console.log('[Pocket AI] 인터럽트 신호 전송');
+        }
+        // PWA → Codex: 원격 설정 변경
+        if (msg.t === 'control-command') {
+          const cmd = msg as unknown as import('@pocket-ai/wire').SessionMessageControlCommand;
+          if (cmd.command === 'get-settings') {
+            const currentSettings = {
+              t: 'settings-sync',
+              permissionMode: 'default',
+              model: 'codex',
+              builtinWorkers: loadConfig().builtinWorkers,
+              customWorkers: loadWorkers(),
+            };
+            encrypt(JSON.stringify(currentSettings), sessionKey)
+              .then((encrypted) => {
+                socket!.emit('update', { sessionId, sender: 'cli', body: encrypted });
+              })
+              .catch(() => { });
+          }
+        }
+      }));
+
+      socket.on('session-spawn-request', (payload: any) => {
+        if (!payload || typeof payload.sessionId !== 'string') return;
+        const requestedEngine = typeof payload?.metadata?.engine === 'string'
+          ? payload.metadata.engine.trim().toLowerCase() : '';
+        const requestedCwd = typeof payload?.metadata?.cwd === 'string'
+          ? payload.metadata.cwd.trim() : '';
+        if (!requestedEngine || !isPresetEngine(requestedEngine) || !requestedCwd) return;
+        console.log(`[Pocket AI] 원격 세션 생성 요청: ${payload.sessionId.slice(0, 8)}... (${requestedEngine})`);
+        spawnSessionFromRequest({ sessionId: payload.sessionId, engine: requestedEngine, cwd: requestedCwd });
+      });
+    }
+
+    // Graceful shutdown
+    const cleanup = () => {
+      bridge.kill();
+      if (socket) socket.disconnect();
+      process.exit(0);
+    };
+    process.on('SIGINT', cleanup);
+    process.on('SIGTERM', cleanup);
+
   } else {
     // ════════════════════════════════════════════════════
-    // Codex / Gemini: 기존 PTY + JSONL/텍스트 릴레이
+    // Gemini / 커스텀: 기존 PTY + JSONL/텍스트 릴레이
     // ════════════════════════════════════════════════════
 
     // Dynamically import node-pty (native module)

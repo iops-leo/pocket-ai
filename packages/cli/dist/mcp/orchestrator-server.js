@@ -115,32 +115,26 @@ function callCustomWorker(binary, prompt) {
         });
     });
 }
-// ── OpenAI Codex CLI: GPT 기반 코드 편집 ─────────────────────
-function callCodex(prompt) {
-    return new Promise((resolve, reject) => {
-        // codex exec <prompt> : 비대화형 실행 모드 (Rust 기반 새 Codex CLI)
-        const child = spawn('codex', [
-            'exec', prompt,
-        ], {
-            cwd: SESSION_CWD,
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: { ...process.env },
-        });
-        let stdout = '';
-        let stderr = '';
-        child.stdout.on('data', (d) => stdout += d.toString());
-        child.stderr.on('data', (d) => stderr += d.toString());
-        child.on('error', (err) => reject(new Error(`codex 실행 실패: ${err.message}. 설치 여부 확인: npm install -g @openai/codex`)));
-        child.on('close', (code) => {
-            const result = stripAnsi(stdout).trim();
-            if (code !== 0 && !result) {
-                reject(new Error(`codex가 비정상 종료되었습니다 (code ${code}): ${stderr.slice(0, 200)}`));
-            }
-            else {
-                resolve(result || stripAnsi(stderr).trim());
-            }
-        });
+// ── OpenAI Codex SDK: GPT 기반 코드 편집 ─────────────────────
+async function callCodex(prompt) {
+    const { Codex } = await import('@openai/codex-sdk');
+    const codex = new Codex();
+    const thread = codex.startThread({
+        workingDirectory: SESSION_CWD,
+        skipGitRepoCheck: true,
+        approvalPolicy: 'never',
+        sandboxMode: 'workspace-write',
     });
+    const turn = await thread.run(prompt);
+    // finalResponse가 있으면 사용, 없으면 agent_message 아이템에서 텍스트 추출
+    if (turn.finalResponse) {
+        return turn.finalResponse;
+    }
+    const texts = turn.items
+        .filter((item) => item.type === 'agent_message')
+        .map(item => item.text)
+        .filter(Boolean);
+    return texts.join('\n') || '(no output)';
 }
 // ── MCP 서버 정의 ─────────────────────────────────────────────
 const server = new Server({
