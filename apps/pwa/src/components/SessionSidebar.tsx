@@ -19,6 +19,13 @@ interface Session {
     lastPing?: number;
 }
 
+type WorkerStatusValue = 'ready' | 'not_installed' | 'check_needed' | 'disabled';
+interface WorkerStatusMap {
+    gemini: WorkerStatusValue;
+    codex: WorkerStatusValue;
+    aider: WorkerStatusValue;
+}
+
 interface SessionSidebarProps {
     sessions: Session[];
     activeSessionId: string | null;
@@ -27,6 +34,7 @@ interface SessionSidebarProps {
     onRefresh?: () => void;
     isCollapsed?: boolean;
     onToggleCollapse?: () => void;
+    workerStatus?: WorkerStatusMap | null;
 }
 
 function getShortPath(cwd?: string): string {
@@ -61,6 +69,7 @@ export function SessionSidebar({
     onRefresh,
     isCollapsed = false,
     onToggleCollapse,
+    workerStatus,
 }: SessionSidebarProps) {
     const t = useTranslations('dashboard');
     const [searchQuery, setSearchQuery] = useState('');
@@ -221,6 +230,28 @@ export function SessionSidebar({
                         </button>
                     ))}
                 </div>
+
+                {/* Worker Status */}
+                {workerStatus && sessions.some(s => s.status === 'online') && (
+                    <div className="flex items-center gap-3 mt-2.5 px-0.5">
+                        {(['gemini', 'codex', 'aider'] as const).map(key => {
+                            const status = workerStatus[key];
+                            if (status === 'disabled') return null;
+                            return (
+                                <div key={key} className="flex items-center gap-1 text-[10px]">
+                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                        status === 'ready' ? 'bg-emerald-400' :
+                                        status === 'not_installed' ? 'bg-red-400' :
+                                        'bg-yellow-400'
+                                    }`} />
+                                    <span className={status === 'ready' ? 'text-gray-400' : 'text-gray-500'}>
+                                        {key.charAt(0).toUpperCase() + key.slice(1)}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 overflow-y-auto px-2 py-3 space-y-6 custom-scrollbar">

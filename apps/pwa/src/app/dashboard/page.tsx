@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Terminal, Loader2, Menu } from 'lucide-react';
 import { TerminalChat } from '@/components/TerminalChat';
@@ -20,6 +20,11 @@ interface Session {
         hostname?: string;
         engine?: string;
         cwd?: string;
+        workerStatus?: {
+            gemini: 'ready' | 'not_installed' | 'check_needed' | 'disabled';
+            codex: 'ready' | 'not_installed' | 'check_needed' | 'disabled';
+            aider: 'ready' | 'not_installed' | 'check_needed' | 'disabled';
+        };
     };
     status: string;
     lastPing?: number;
@@ -55,6 +60,12 @@ export default function DashboardPage() {
     const hasAutoOpenedMobileSidebar = useRef(false);
     const pendingAutoSelectRef = useRef(false);
     const sessionsBeforeCreateRef = useRef<Set<string>>(new Set());
+
+    // online 세션의 metadata에서 workerStatus 추출 (같은 데몬이면 동일)
+    const workerStatus = useMemo(() => {
+        const onlineSession = sessions.find(s => s.status === 'online');
+        return onlineSession?.metadata?.workerStatus ?? null;
+    }, [sessions]);
 
     const showToast = useCallback((message: string, type: 'error' | 'success' = 'error') => {
         setToast({ message, type });
@@ -398,6 +409,7 @@ export default function DashboardPage() {
                     onRefresh={() => fetchSessions(false)}
                     isCollapsed={isSidebarCollapsed}
                     onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                    workerStatus={workerStatus}
                 />
             </div>
 
@@ -488,6 +500,7 @@ export default function DashboardPage() {
                                 .filter((engine): engine is string => Boolean(engine))
                         )
                     )}
+                    workerStatus={workerStatus}
                 />
             )}
         </div>

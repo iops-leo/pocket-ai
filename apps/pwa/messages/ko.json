@@ -106,7 +106,10 @@
     "deleteSessionFailed": "세션 삭제에 실패했습니다",
     "renameSessionFailed": "세션 이름 변경에 실패했습니다",
     "cancel": "취소",
-    "installApp": "앱 설치 (홈 화면에 추가)"
+    "installApp": "앱 설치 (홈 화면에 추가)",
+    "engineNotInstalled": "미설치",
+    "engineCheckNeeded": "인증 필요",
+    "engineReady": "사용 가능"
   },
   "settings": {
     "title": "설정",

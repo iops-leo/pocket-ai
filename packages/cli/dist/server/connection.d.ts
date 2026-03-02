@@ -2,7 +2,7 @@ import { Socket } from 'socket.io-client';
 export interface ConnectOptions {
     sessionId: string;
     publicKey: string;
-    metadata: Record<string, string>;
+    metadata: Record<string, unknown>;
     onSessionIdUpdate: (newSessionId: string) => void;
     onAuthSuccess: (data: {
         sessionId: string;
@@ -19,5 +19,5 @@ export interface ConnectOptions {
     onDisconnect: () => void;
 }
 export declare function connectToServer(options: ConnectOptions): Socket;
-export declare function registerSession(publicKey: string, metadata: Record<string, string>): Promise<string>;
+export declare function registerSession(publicKey: string, metadata: Record<string, unknown>): Promise<string>;
 export declare function fetchSessions(): Promise<any[]>;

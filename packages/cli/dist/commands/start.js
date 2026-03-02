@@ -177,26 +177,8 @@ function isBinaryInstalled(name) {
 }
 function quickAuthCheck(name) {
     return new Promise((resolve) => {
-        let cmd;
-        let args;
-        if (name === 'gemini') {
-            // gemini --version: 설치 확인 (인증 불필요)
-            // 실제 인증은 첫 API 호출 시 확인됨
-            cmd = 'gemini';
-            args = ['--version'];
-        }
-        else if (name === 'codex') {
-            cmd = 'codex';
-            args = ['--version'];
-        }
-        else if (name === 'aider') {
-            cmd = 'aider';
-            args = ['--version'];
-        }
-        else {
-            resolve(true);
-            return;
-        }
+        const cmd = name;
+        const args = ['--version'];
         const child = spawn(cmd, args, {
             stdio: ['ignore', 'pipe', 'pipe'],
             env: { ...process.env },
@@ -206,31 +188,41 @@ function quickAuthCheck(name) {
         child.on('error', () => { clearTimeout(timer); resolve(false); });
     });
 }
+// 마지막 헬스체크 결과 캐시 (settings-sync 시 재사용)
+let lastWorkerHealth = { gemini: 'disabled', codex: 'disabled', aider: 'disabled' };
 async function checkWorkerHealth(config) {
     console.log('[Pocket AI] Worker 상태 확인...');
-    const workers = [
-        { name: 'gemini', enabled: config.builtinWorkers.gemini, installCmd: 'npm i -g @google/gemini-cli' },
-        { name: 'codex', enabled: config.builtinWorkers.codex, installCmd: 'npm i -g @openai/codex' },
-        { name: 'aider', enabled: config.builtinWorkers.aider, installCmd: 'pip install aider-chat' },
-    ];
-    for (const w of workers) {
-        if (!w.enabled) {
-            console.log(`  - ${w.name}: 비활성화`);
+    const keys = ['gemini', 'codex', 'aider'];
+    const installCmds = {
+        gemini: 'npm i -g @google/gemini-cli',
+        codex: 'npm i -g @openai/codex',
+        aider: 'pip install aider-chat',
+    };
+    const result = { gemini: 'disabled', codex: 'disabled', aider: 'disabled' };
+    for (const key of keys) {
+        if (!config.builtinWorkers[key]) {
+            console.log(`  - ${key}: 비활성화`);
+            result[key] = 'disabled';
             continue;
         }
-        const installed = await isBinaryInstalled(w.name);
+        const installed = await isBinaryInstalled(key);
         if (!installed) {
-            console.log(`  ✗ ${w.name}: 미설치 (${w.installCmd})`);
+            console.log(`  ✗ ${key}: 미설치 (${installCmds[key]})`);
+            result[key] = 'not_installed';
             continue;
         }
-        const ok = await quickAuthCheck(w.name);
+        const ok = await quickAuthCheck(key);
         if (ok) {
-            console.log(`  ✓ ${w.name}: 준비됨`);
+            console.log(`  ✓ ${key}: 준비됨`);
+            result[key] = 'ready';
         }
         else {
-            console.log(`  ⚠ ${w.name}: 설치됨, 실행 확인 필요 (${w.name} 단독 실행 후 로그인)`);
+            console.log(`  ⚠ ${key}: 설치됨, 실행 확인 필요 (${key} 단독 실행 후 로그인)`);
+            result[key] = 'check_needed';
         }
     }
+    lastWorkerHealth = result;
+    return result;
 }
 // 설정 파일 경로
 const CONFIG_DIR = path.join(os.homedir(), '.config', 'pocket-ai');
@@ -486,7 +478,7 @@ export async function startSession(command = 'claude', options = {}) {
         return {
             sessionId,
             publicKey: publicKeyBase64,
-            metadata: { hostname: os.hostname(), engine, cwd },
+            metadata: { hostname: os.hostname(), engine, cwd, workerStatus: lastWorkerHealth },
             onSessionIdUpdate: async (newSessionId) => {
                 sessionId = newSessionId;
                 await persistSessionKeys(newSessionId);
@@ -595,7 +587,7 @@ export async function startSession(command = 'claude', options = {}) {
                 fs.renameSync(tmpPath, claudeConfigPath);
                 console.log('[Pocket AI] Multi-Model Orchestrator MCP 등록 완료');
                 // Worker 헬스체크 (비동기, 결과만 로그)
-                checkWorkerHealth(savedCfg).catch(() => { });
+                await checkWorkerHealth(savedCfg).catch(() => { });
             }
             catch (err) {
                 console.error('[Pocket AI] MCP 서버 설정 등록 실패:', err.message);
@@ -681,6 +673,7 @@ export async function startSession(command = 'claude', options = {}) {
                             model: 'default',
                             builtinWorkers: loadConfig().builtinWorkers,
                             customWorkers: loadWorkers(),
+                            workerStatus: lastWorkerHealth,
                         };
                         encrypt(JSON.stringify(currentSettings), sessionKey)
                             .then((encrypted) => {
@@ -816,6 +809,7 @@ export async function startSession(command = 'claude', options = {}) {
                             model: 'codex',
                             builtinWorkers: loadConfig().builtinWorkers,
                             customWorkers: loadWorkers(),
+                            workerStatus: lastWorkerHealth,
                         };
                         encrypt(JSON.stringify(currentSettings), sessionKey)
                             .then((encrypted) => {

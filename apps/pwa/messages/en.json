@@ -106,7 +106,10 @@
     "deleteSessionFailed": "Failed to delete session",
     "renameSessionFailed": "Failed to rename session",
     "cancel": "Cancel",
-    "installApp": "Install App"
+    "installApp": "Install App",
+    "engineNotInstalled": "Not installed",
+    "engineCheckNeeded": "Auth needed",
+    "engineReady": "Available"
   },
   "settings": {
     "title": "Settings",

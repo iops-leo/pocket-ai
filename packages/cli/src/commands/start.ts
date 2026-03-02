@@ -547,7 +547,7 @@ export async function startSession(command: string = 'claude', options: StartOpt
     return {
       sessionId,
       publicKey: publicKeyBase64,
-      metadata: { hostname: os.hostname(), engine, cwd } as Record<string, string>,
+      metadata: { hostname: os.hostname(), engine, cwd, workerStatus: lastWorkerHealth },
       onSessionIdUpdate: async (newSessionId: string) => {
         sessionId = newSessionId;
         await persistSessionKeys(newSessionId);
@@ -661,7 +661,7 @@ export async function startSession(command: string = 'claude', options: StartOpt
         console.log('[Pocket AI] Multi-Model Orchestrator MCP 등록 완료');
 
         // Worker 헬스체크 (비동기, 결과만 로그)
-        checkWorkerHealth(savedCfg).catch(() => {});
+        await checkWorkerHealth(savedCfg).catch(() => {});
       } catch (err: any) {
         console.error('[Pocket AI] MCP 서버 설정 등록 실패:', err.message);
       }

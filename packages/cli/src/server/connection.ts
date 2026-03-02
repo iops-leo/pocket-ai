@@ -30,7 +30,7 @@ async function tryRefreshToken(): Promise<string | null> {
 export interface ConnectOptions {
   sessionId: string;
   publicKey: string;
-  metadata: Record<string, string>;
+  metadata: Record<string, unknown>;
   onSessionIdUpdate: (newSessionId: string) => void;
   onAuthSuccess: (data: { sessionId: string }) => void;
   onAuthError: (data: { error: string }) => void;
@@ -130,7 +130,7 @@ export function connectToServer(options: ConnectOptions): Socket {
   return socket;
 }
 
-export async function registerSession(publicKey: string, metadata: Record<string, string>): Promise<string> {
+export async function registerSession(publicKey: string, metadata: Record<string, unknown>): Promise<string> {
   const serverUrl = getServerUrl();
   const token = getToken();
 

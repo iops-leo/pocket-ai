@@ -11,11 +11,19 @@ interface RecentPathItem {
     useCount?: number;
 }
 
+type WorkerStatusValue = 'ready' | 'not_installed' | 'check_needed' | 'disabled';
+interface WorkerStatus {
+    gemini: WorkerStatusValue;
+    codex: WorkerStatusValue;
+    aider: WorkerStatusValue;
+}
+
 interface NewSessionModalProps {
     onClose: () => void;
     onSubmit: (data: { cwd: string; engine: string; sessionName?: string }) => Promise<void>;
     recentPaths?: RecentPathItem[];
     enabledEngines?: string[];
+    workerStatus?: WorkerStatus | null;
 }
 
 const PRESET_ENGINES = [
@@ -36,7 +44,7 @@ const QUICK_PATHS = [
 const RECENT_PATH_PINS_KEY = 'pocket_ai_recent_path_pins';
 const RECENT_PATH_HIDDEN_KEY = 'pocket_ai_recent_path_hidden';
 
-export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEngines }: NewSessionModalProps) {
+export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEngines, workerStatus }: NewSessionModalProps) {
     const t = useTranslations('dashboard');
     const tc = useTranslations('common');
     const [cwd, setCwd] = useState('');
@@ -52,9 +60,19 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
     const panelRef = useRef<HTMLDivElement>(null);
 
     const enabledEngineSet = useMemo(() => {
-        const source = enabledEngines ?? PRESET_ENGINES.map(item => item.id);
+        const onlineEngines = enabledEngines ?? [];
+        // workerStatus가 있고 데몬이 online이면 → 설치/인증 상태 기반 활성화
+        if (workerStatus && onlineEngines.length > 0) {
+            const set = new Set<string>();
+            set.add('claude'); // Claude는 데몬이 곧 Claude
+            if (workerStatus.gemini === 'ready' || workerStatus.gemini === 'check_needed') set.add('gemini');
+            if (workerStatus.codex === 'ready' || workerStatus.codex === 'check_needed') set.add('codex');
+            return set;
+        }
+        // Fallback: online 세션의 엔진 목록 (하위 호환)
+        const source = onlineEngines.length > 0 ? onlineEngines : PRESET_ENGINES.map(item => item.id);
         return new Set(source.map(item => item.trim().toLowerCase()));
-    }, [enabledEngines]);
+    }, [enabledEngines, workerStatus]);
 
     useEffect(() => {
         if (engine === CUSTOM_ENGINE_ID) return;
@@ -346,29 +364,51 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
                             {t('engine')}
                         </label>
                         <div className="grid grid-cols-4 gap-2">
-                            {PRESET_ENGINES.map(eng => (
-                                <button
-                                    key={eng.id}
-                                    type="button"
-                                    onClick={() => {
-                                        if (!enabledEngineSet.has(eng.id)) return;
-                                        setEngine(eng.id);
-                                    }}
-                                    disabled={!enabledEngineSet.has(eng.id)}
-                                    className={`p-3 rounded-xl border text-center transition-all ${
-                                        !enabledEngineSet.has(eng.id)
-                                            ? 'border-gray-800 bg-gray-900 text-gray-600 cursor-not-allowed opacity-50'
-                                            : engine === eng.id
-                                            ? 'border-blue-500 bg-blue-600/20'
-                                            : 'border-gray-700 bg-gray-800 hover:border-gray-600'
-                                    }`}
-                                >
-                                    <div className={`w-3 h-3 rounded-full mx-auto mb-2 ${eng.color}`} />
-                                    <div className={`text-sm font-medium ${enabledEngineSet.has(eng.id) ? 'text-white' : 'text-gray-500'}`}>
-                                        {eng.name}
-                                    </div>
-                                </button>
-                            ))}
+                            {PRESET_ENGINES.map(eng => {
+                                const isEnabled = enabledEngineSet.has(eng.id);
+                                const status = eng.id !== 'claude' ? workerStatus?.[eng.id as keyof WorkerStatus] : undefined;
+                                return (
+                                    <button
+                                        key={eng.id}
+                                        type="button"
+                                        onClick={() => {
+                                            if (!isEnabled) return;
+                                            setEngine(eng.id);
+                                        }}
+                                        disabled={!isEnabled}
+                                        className={`p-3 rounded-xl border text-center transition-all ${
+                                            !isEnabled
+                                                ? 'border-gray-800 bg-gray-900 text-gray-600 cursor-not-allowed opacity-50'
+                                                : engine === eng.id
+                                                ? 'border-blue-500 bg-blue-600/20'
+                                                : 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                                        }`}
+                                    >
+                                        <div className="relative w-3 h-3 mx-auto mb-2">
+                                            <div className={`w-full h-full rounded-full ${eng.color}`} />
+                                            {status === 'ready' && (
+                                                <div className="absolute -top-0.5 -right-1.5 w-2 h-2 bg-emerald-400 rounded-full border border-gray-900" />
+                                            )}
+                                            {status === 'check_needed' && (
+                                                <div className="absolute -top-0.5 -right-1.5 w-2 h-2 bg-yellow-400 rounded-full border border-gray-900" />
+                                            )}
+                                            {status === 'not_installed' && (
+                                                <div className="absolute -top-0.5 -right-1.5 w-2 h-2 bg-red-400 rounded-full border border-gray-900" />
+                                            )}
+                                        </div>
+                                        <div className={`text-sm font-medium ${isEnabled ? 'text-white' : 'text-gray-500'}`}>
+                                            {eng.name}
+                                        </div>
+                                        {status && !isEnabled && (
+                                            <div className={`text-[9px] mt-0.5 ${
+                                                status === 'not_installed' ? 'text-red-400/70' : 'text-gray-500'
+                                            }`}>
+                                                {status === 'not_installed' ? t('engineNotInstalled') : t('engineCheckNeeded')}
+                                            </div>
+                                        )}
+                                    </button>
+                                );
+                            })}
                             <button
                                 type="button"
                                 onClick={() => setEngine(CUSTOM_ENGINE_ID)}
@@ -384,7 +424,7 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
                                 </div>
                             </button>
                         </div>
-                        {isCustomSelected ? (
+                        {isCustomSelected && (
                             <div className="mt-2 space-y-2">
                                 <input
                                     type="text"
@@ -397,7 +437,8 @@ export function NewSessionModal({ onClose, onSubmit, recentPaths = [], enabledEn
                                     {t('customEngineHint')}
                                 </p>
                             </div>
-                        ) : (
+                        )}
+                        {!isCustomSelected && !workerStatus && (
                             <p className="text-[11px] text-gray-500 mt-2">
                                 {t('engineOnlineOnly')}
                             </p>
