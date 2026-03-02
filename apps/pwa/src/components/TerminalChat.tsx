@@ -345,6 +345,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                             model: modelMap[msg.model] || 'default',
                             builtinWorkers: msg.builtinWorkers || { gemini: true, codex: true, aider: true },
                             customWorkers: msg.customWorkers || [],
+                            workerStatus: msg.workerStatus,
                         });
                     }
 

@@ -16,6 +16,30 @@ const CODEX_PATTERNS = [
     },
 ];
 const GEMINI_PATTERNS = [
+    // Gemini numbered permission menu (MCP tools, shell, file write 등)
+    {
+        detect: /1\.\s*Allow once/,
+        extract: (buf) => {
+            // MCP 도구 권한
+            const mcpMatch = buf.match(/MCP tool "(.+?)"/);
+            const serverMatch = buf.match(/from server "(.+?)"/);
+            if (mcpMatch) {
+                return {
+                    toolName: mcpMatch[1],
+                    message: `MCP: ${mcpMatch[1]} (${serverMatch?.[1] || 'unknown'})`,
+                };
+            }
+            // 일반 권한 (파일, 셸 등)
+            const allowMatch = buf.match(/(?:Allow|Confirm) (.+?)\?/i);
+            return {
+                toolName: 'Permission',
+                message: allowMatch?.[0] || 'Gemini requests permission',
+            };
+        },
+        approveKey: '\r', // Enter (option 1 기본 선택)
+        denyKey: '\x1B', // Esc
+    },
+    // Legacy y/n 스타일
     {
         detect: /Approve\?|Do you want to|Confirm write|allow this action/i,
         extract: (buf) => {

@@ -67,6 +67,171 @@ function spawnSessionFromRequest(payload) {
 function stripAnsi(input) {
     return input.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
 }
+// ── PTY 출력 디바운서 (Gemini TUI 노이즈 제거) ────────────────────────
+// TUI 노이즈 패턴: 스피너, 박스 드로잉, 프롬프트 인디케이터 등
+const TUI_NOISE_RE = /^[\s▀▄▌▐█░▒▓─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✦◇◆◈○●◎▷◁▽△☐☑;·•\-_~|\\\/\[\](){}]*$/;
+const SHORTCUT_LINE_RE = /^\??\s*for shortcuts|shift\+tab|esc to cancel|no sandbox|\/model|Type your message|GEMINI\.md|MCP server|\d+ skills|\d+s\)\s*shortcuts?|◇\s*Ready|Streaming/i;
+function cleanTuiPrefix(line) {
+    return line.replace(/^[✦◇◆▶]\s*/, '');
+}
+function isTuiNoise(line) {
+    const trimmed = line.trim();
+    if (!trimmed)
+        return true;
+    if (trimmed.length <= 1)
+        return true;
+    if (TUI_NOISE_RE.test(trimmed))
+        return true;
+    if (SHORTCUT_LINE_RE.test(trimmed))
+        return true;
+    // 타임스탬프 (예: "11:16")
+    if (/^\d{1,2}:\d{2}$/.test(trimmed))
+        return true;
+    if (trimmed === '복사')
+        return true;
+    // Gemini 타이머: "0s)", "12s)" 등
+    if (/^\d+s\)/.test(trimmed))
+        return true;
+    // 장식 문자가 70% 이상인 줄 (예: ▄▄▄▄▄...▄ 안녕)
+    const nonTui = trimmed.replace(/[▀▄▌▐█░▒▓─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✦◇◆◈○●◎▷◁▽△☐☑\s;·•\-_~|\\\/\[\](){}]/g, '');
+    if (nonTui.length < trimmed.length * 0.3 && trimmed.length > 5)
+        return true;
+    return false;
+}
+class DebouncedPtyRelay {
+    buffer = '';
+    timer = null;
+    lastSent = '';
+    delay;
+    onFlush;
+    constructor(delay, onFlush) {
+        this.delay = delay;
+        this.onFlush = onFlush;
+    }
+    feed(rawData) {
+        const plainText = stripAnsi(rawData);
+        if (!plainText.trim())
+            return;
+        // \r 처리: carriage return = 현재 줄 덮어쓰기 (Gemini 스피너/타이머 반복 제거)
+        for (const char of plainText) {
+            if (char === '\n') {
+                this.buffer += '\n';
+            }
+            else if (char === '\r') {
+                const lastNewline = this.buffer.lastIndexOf('\n');
+                this.buffer = this.buffer.substring(0, lastNewline + 1);
+            }
+            else {
+                this.buffer += char;
+            }
+        }
+        if (!this.buffer.trim())
+            return;
+        if (this.timer)
+            clearTimeout(this.timer);
+        this.timer = setTimeout(() => this.flush(), this.delay);
+    }
+    flush() {
+        this.timer = null;
+        if (!this.buffer.trim()) {
+            this.buffer = '';
+            return;
+        }
+        // 줄 단위: 노이즈 필터 → 접두사 제거 → 빈 줄 제거
+        const lines = this.buffer.split('\n');
+        const meaningful = lines
+            .filter(line => !isTuiNoise(line))
+            .map(line => cleanTuiPrefix(line))
+            .filter(line => line.trim());
+        const cleaned = meaningful.join('\n').trim();
+        this.buffer = '';
+        if (!cleaned)
+            return;
+        if (cleaned === this.lastSent)
+            return;
+        this.lastSent = cleaned;
+        this.onFlush(cleaned);
+    }
+    clear() {
+        if (this.timer) {
+            clearTimeout(this.timer);
+            this.timer = null;
+        }
+        this.buffer = '';
+    }
+    destroy() {
+        if (this.timer) {
+            clearTimeout(this.timer);
+            this.timer = null;
+        }
+        if (this.buffer.trim())
+            this.flush();
+    }
+}
+function isBinaryInstalled(name) {
+    return new Promise((resolve) => {
+        const child = spawn('which', [name], { stdio: ['ignore', 'pipe', 'ignore'] });
+        child.on('close', (code) => resolve(code === 0));
+        child.on('error', () => resolve(false));
+    });
+}
+function quickAuthCheck(name) {
+    return new Promise((resolve) => {
+        let cmd;
+        let args;
+        if (name === 'gemini') {
+            // gemini --version: 설치 확인 (인증 불필요)
+            // 실제 인증은 첫 API 호출 시 확인됨
+            cmd = 'gemini';
+            args = ['--version'];
+        }
+        else if (name === 'codex') {
+            cmd = 'codex';
+            args = ['--version'];
+        }
+        else if (name === 'aider') {
+            cmd = 'aider';
+            args = ['--version'];
+        }
+        else {
+            resolve(true);
+            return;
+        }
+        const child = spawn(cmd, args, {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: { ...process.env },
+        });
+        const timer = setTimeout(() => { child.kill(); resolve(false); }, 5000);
+        child.on('close', (code) => { clearTimeout(timer); resolve(code === 0); });
+        child.on('error', () => { clearTimeout(timer); resolve(false); });
+    });
+}
+async function checkWorkerHealth(config) {
+    console.log('[Pocket AI] Worker 상태 확인...');
+    const workers = [
+        { name: 'gemini', enabled: config.builtinWorkers.gemini, installCmd: 'npm i -g @google/gemini-cli' },
+        { name: 'codex', enabled: config.builtinWorkers.codex, installCmd: 'npm i -g @openai/codex' },
+        { name: 'aider', enabled: config.builtinWorkers.aider, installCmd: 'pip install aider-chat' },
+    ];
+    for (const w of workers) {
+        if (!w.enabled) {
+            console.log(`  - ${w.name}: 비활성화`);
+            continue;
+        }
+        const installed = await isBinaryInstalled(w.name);
+        if (!installed) {
+            console.log(`  ✗ ${w.name}: 미설치 (${w.installCmd})`);
+            continue;
+        }
+        const ok = await quickAuthCheck(w.name);
+        if (ok) {
+            console.log(`  ✓ ${w.name}: 준비됨`);
+        }
+        else {
+            console.log(`  ⚠ ${w.name}: 설치됨, 실행 확인 필요 (${w.name} 단독 실행 후 로그인)`);
+        }
+    }
+}
 // 설정 파일 경로
 const CONFIG_DIR = path.join(os.homedir(), '.config', 'pocket-ai');
 const WORKERS_FILE = path.join(CONFIG_DIR, 'workers.json');
@@ -392,11 +557,11 @@ export async function startSession(command = 'claude', options = {}) {
         // ════════════════════════════════════════════════════
         // Claude 전용: JSON 스트리밍 브릿지 및 MCP 오케스트레이터
         // ════════════════════════════════════════════════════
-        // 1. MCP 오케스트레이터 ~/.claude/claude.json 등록
+        // 1. MCP 오케스트레이터 ~/.claude/settings.json 등록 (Claude Code가 읽는 설정 파일)
         // Claude가 자체적으로 MCP 서버를 spawn하므로 여기서 프로세스를 띄울 필요 없음
         const mcpServerPath = path.resolve(__dirname, '..', 'mcp', 'orchestrator-server.js');
         if (fs.existsSync(mcpServerPath)) {
-            const claudeConfigPath = path.join(os.homedir(), '.claude', 'claude.json');
+            const claudeConfigPath = path.join(os.homedir(), '.claude', 'settings.json');
             try {
                 let config = {};
                 if (fs.existsSync(claudeConfigPath)) {
@@ -429,6 +594,8 @@ export async function startSession(command = 'claude', options = {}) {
                 fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2), 'utf-8');
                 fs.renameSync(tmpPath, claudeConfigPath);
                 console.log('[Pocket AI] Multi-Model Orchestrator MCP 등록 완료');
+                // Worker 헬스체크 (비동기, 결과만 로그)
+                checkWorkerHealth(savedCfg).catch(() => { });
             }
             catch (err) {
                 console.error('[Pocket AI] MCP 서버 설정 등록 실패:', err.message);
@@ -531,8 +698,8 @@ export async function startSession(command = 'claude', options = {}) {
                                     codex: workers.codex !== false,
                                     aider: workers.aider !== false,
                                 } });
-                            // 2. 현재 실행 중인 claude.json MCP env도 즉시 업데이트
-                            const claudeConfigPath = path.join(os.homedir(), '.claude', 'claude.json');
+                            // 2. 현재 실행 중인 settings.json MCP env도 즉시 업데이트
+                            const claudeConfigPath = path.join(os.homedir(), '.claude', 'settings.json');
                             if (fs.existsSync(claudeConfigPath)) {
                                 const cfg = JSON.parse(fs.readFileSync(claudeConfigPath, 'utf-8'));
                                 if (cfg.mcpServers?.['pocket-ai-orchestrator']?.env) {
@@ -574,9 +741,9 @@ export async function startSession(command = 'claude', options = {}) {
             bridge.kill();
             if (socket)
                 socket.disconnect();
-            // Pocket AI 종료 시 MCP 오케스트레이터 등록 해제 (PWA 전용 기능 보장)
+            // Pocket AI 종료 시 MCP 오케스트레이터 등록 해제
             try {
-                const cfgPath = path.join(os.homedir(), '.claude', 'claude.json');
+                const cfgPath = path.join(os.homedir(), '.claude', 'settings.json');
                 if (fs.existsSync(cfgPath)) {
                     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
                     if (cfg.mcpServers?.['pocket-ai-orchestrator']) {
@@ -714,10 +881,17 @@ export async function startSession(command = 'claude', options = {}) {
             });
         sessionWatcher?.start();
         const shouldRelayPtyText = !sessionWatcher;
+        // PTY 출력 디바운서: TUI 노이즈 제거 + 300ms 버퍼링
+        const ptyRelay = new DebouncedPtyRelay(300, (text) => {
+            if (socket && sessionKey) {
+                relayEvent({ t: 'text', text });
+            }
+        });
         // 프롬프트 감지는 프리셋 엔진(codex/gemini)에서만
         const isDetectableEngine = !isCustomEngine && (engine === 'codex' || engine === 'gemini');
         const promptDetector = isDetectableEngine
             ? new PtyPromptDetector(engine, (request) => {
+                ptyRelay.clear(); // 권한 프롬프트 텍스트가 일반 메시지로 전송되는 것 방지
                 relayEvent(request);
                 if (!headless) {
                     console.log(`\n[Pocket AI] 권한 요청 감지: ${request.message || request.toolName}`);
@@ -730,11 +904,8 @@ export async function startSession(command = 'claude', options = {}) {
                 process.stdout.write(data);
             }
             promptDetector?.feed(data);
-            if (shouldRelayPtyText && socket && sessionKey) {
-                const plainText = stripAnsi(data).replace(/\r/g, '');
-                if (!plainText.trim())
-                    return;
-                relayEvent({ t: 'text', text: plainText });
+            if (shouldRelayPtyText) {
+                ptyRelay.feed(data);
             }
         });
         if (!headless) {
@@ -751,6 +922,7 @@ export async function startSession(command = 'claude', options = {}) {
         }
         shell.onExit(({ exitCode }) => {
             console.log(`\nAI CLI 프로세스가 종료되었습니다 (code: ${exitCode})`);
+            ptyRelay.destroy();
             sessionWatcher?.destroy();
             if (socket)
                 socket.disconnect();

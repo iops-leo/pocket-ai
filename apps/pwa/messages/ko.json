@@ -198,6 +198,10 @@
     "workerCancel": "취소",
     "workerAddNew": "Worker 추가",
     "workerHint": "설명을 구체적으로 쓸수록 Claude가 더 정확히 위임합니다",
+    "statusReady": "준비됨",
+    "statusNotInstalled": "미설치",
+    "statusCheckNeeded": "인증 확인 필요",
+    "statusDisabled": "비활성화",
     "tabSession": "세션",
     "tabWorkers": "Workers"
   },

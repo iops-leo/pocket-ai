@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Shield, Cpu, Boxes, Plus, Trash2, SlidersHorizontal, Network } from 'lucide-react';
+import { X, Shield, Cpu, Boxes, Plus, Trash2, SlidersHorizontal, Network, CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -19,11 +19,20 @@ export interface BuiltinWorkers {
     aider: boolean;
 }
 
+export type WorkerStatusValue = 'ready' | 'not_installed' | 'check_needed' | 'disabled';
+
+export interface WorkerStatus {
+    gemini: WorkerStatusValue;
+    codex: WorkerStatusValue;
+    aider: WorkerStatusValue;
+}
+
 export interface ChatSettings {
     permissionMode: PermissionMode;
     model: ModelSetting;
     customWorkers: CustomWorker[];
     builtinWorkers: BuiltinWorkers;
+    workerStatus?: WorkerStatus;
 }
 
 interface ChatSettingsPanelProps {
@@ -232,6 +241,7 @@ export function ChatSettingsPanel({ settings, onSettingsChange, onClose, isClaud
                                 <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider pb-1">{t('builtinWorkers')}</p>
                                 {BUILTIN_WORKER_DEFS.map((w) => {
                                     const enabled = settings.builtinWorkers[w.key];
+                                    const status = settings.workerStatus?.[w.key];
                                     return (
                                         <div key={w.key} className={`flex items-start gap-2 px-3 py-2 rounded-xl border transition-colors ${enabled ? 'border-gray-700/60 bg-gray-800/40' : 'border-gray-800/60 bg-gray-900/30 opacity-60'}`}>
                                             <div className="flex-1 min-w-0">
@@ -240,6 +250,23 @@ export function ChatSettingsPanel({ settings, onSettingsChange, onClose, isClaud
                                                     <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${w.badgeColor}`}>{w.badge}</span>
                                                 </div>
                                                 <p className="text-[11px] text-gray-500 mt-0.5">{t(w.descKey)}</p>
+                                                {/* 연결 상태 */}
+                                                {enabled && status && (
+                                                    <div className="flex items-center gap-1 mt-1">
+                                                        {status === 'ready' && (
+                                                            <><CheckCircle2 size={10} className="text-emerald-400" /><span className="text-[10px] text-emerald-400">{t('statusReady')}</span></>
+                                                        )}
+                                                        {status === 'not_installed' && (
+                                                            <><XCircle size={10} className="text-red-400" /><span className="text-[10px] text-red-400">{t('statusNotInstalled')}</span></>
+                                                        )}
+                                                        {status === 'check_needed' && (
+                                                            <><AlertTriangle size={10} className="text-yellow-400" /><span className="text-[10px] text-yellow-400">{t('statusCheckNeeded')}</span></>
+                                                        )}
+                                                        {status === 'disabled' && (
+                                                            <><MinusCircle size={10} className="text-gray-500" /><span className="text-[10px] text-gray-500">{t('statusDisabled')}</span></>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                             {/* 토글 스위치 */}
                                             <button

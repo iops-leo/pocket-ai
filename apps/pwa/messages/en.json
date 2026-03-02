@@ -198,6 +198,10 @@
     "workerCancel": "Cancel",
     "workerAddNew": "Add Worker",
     "workerHint": "More specific descriptions help Claude delegate more accurately",
+    "statusReady": "Ready",
+    "statusNotInstalled": "Not installed",
+    "statusCheckNeeded": "Auth check needed",
+    "statusDisabled": "Disabled",
     "tabSession": "Session",
     "tabWorkers": "Workers"
   },
