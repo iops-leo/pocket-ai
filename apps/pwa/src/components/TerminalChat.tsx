@@ -281,6 +281,13 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
                             if (pendingClearRef.current) {
                                 pendingClearRef.current = false;
                                 setMessages([{ kind: 'text', id: crypto.randomUUID(), role: 'assistant', content: '✓ 대화가 초기화됐습니다.' }]);
+                                // CLI 로컬 이력도 초기화 (재접속 시 이전 이력 로드 방지)
+                                const ek = sessionKeyRef.current || sharedSecretRef.current;
+                                if (socketRef.current && ek) {
+                                    encrypt(JSON.stringify({ t: 'session-event', event: 'clear-history' }), ek)
+                                        .then(enc => socketRef.current?.emit('update', { t: 'encrypted', sessionId, sender: 'pwa', body: enc }))
+                                        .catch(() => {});
+                                }
                             }
                         }
                         if (msg.event === 'history-start') {

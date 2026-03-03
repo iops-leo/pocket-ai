@@ -86,7 +86,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             email: user.email,
             name: user.name,
             login: oauth?.provider_account_id || '',
-        }, { expiresIn: '15m' });
+        }, { expiresIn: '30d' });
 
         // 새 refresh token 발급 (rotation)
         const newRefreshToken = await generateRefreshToken(user.id);
@@ -183,7 +183,7 @@ export async function authRoutes(fastify: FastifyInstance) {
                 name: githubUser.name || githubUser.login,
                 login: githubUser.login,
                 avatar_url: githubUser.avatar_url,
-            }, { expiresIn: '15m' });
+            }, { expiresIn: '30d' });
 
             // Refresh token 발급
             const refreshToken = await generateRefreshToken(user.id);

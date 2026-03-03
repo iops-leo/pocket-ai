@@ -291,6 +291,16 @@ function appendToHistory(sid: string, event: Record<string, unknown>): void {
   } catch { /* 비치명적 */ }
 }
 
+function clearHistory(sid: string): void {
+  try {
+    const histFile = getHistoryFile(sid);
+    if (fs.existsSync(histFile)) {
+      fs.writeFileSync(histFile, '', 'utf-8');
+      console.log('[Pocket AI] 이력 파일 초기화 완료');
+    }
+  } catch { /* 비치명적 */ }
+}
+
 interface PocketAiConfig {
   builtinWorkers: { gemini: boolean; codex: boolean; aider: boolean };
 }
@@ -725,6 +735,10 @@ export async function startSession(command: string = 'claude', options: StartOpt
           bridge.interrupt();
           console.log('[Pocket AI] 인터럽트 신호 전송');
         }
+        // PWA → Claude: 이력 초기화
+        if (msg.t === 'session-event' && (msg as any).event === 'clear-history') {
+          clearHistory(sessionId);
+        }
         // PWA → Claude: 원격 설정 변경 (퍼미션 모드, 모델)
         if (msg.t === 'control-command') {
           const cmd = msg as unknown as import('@pocket-ai/wire').SessionMessageControlCommand;
@@ -875,6 +889,10 @@ export async function startSession(command: string = 'claude', options: StartOpt
           bridge.interrupt();
           console.log('[Pocket AI] 인터럽트 신호 전송');
         }
+        // PWA → Codex: 이력 초기화
+        if (msg.t === 'session-event' && (msg as any).event === 'clear-history') {
+          clearHistory(sessionId);
+        }
         // PWA → Codex: 원격 설정 변경
         if (msg.t === 'control-command') {
           const cmd = msg as unknown as import('@pocket-ai/wire').SessionMessageControlCommand;
@@ -1019,6 +1037,10 @@ export async function startSession(command: string = 'claude', options: StartOpt
           } else {
             shell.write(text);
           }
+        }
+        // PWA → Generic: 이력 초기화
+        if (msg.t === 'session-event' && (msg as any).event === 'clear-history') {
+          clearHistory(sessionId);
         }
         // PWA → Codex/Gemini: 권한 응답
         if (msg.t === 'input-response' && promptDetector) {
