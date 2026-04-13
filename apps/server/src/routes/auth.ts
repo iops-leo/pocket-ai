@@ -46,7 +46,8 @@ export async function authRoutes(fastify: FastifyInstance) {
             return reply.code(404).send({ error: 'Token auth not available. Server is in GitHub OAuth mode.' });
         }
 
-        if (!token || token !== setupToken) {
+        if (!token || token.length !== setupToken.length ||
+            !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(setupToken))) {
             return reply.code(401).send({ error: 'Invalid token' });
         }
 
@@ -80,7 +81,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     });
 
     // POST /auth/refresh — access token 갱신 (refresh token rotation)
-    fastify.post('/auth/refresh', async (request, reply) => {
+    fastify.post('/refresh', async (request, reply) => {
         const { refreshToken } = request.body as { refreshToken?: string };
         if (!refreshToken) {
             return reply.code(400).send({ error: 'Missing refreshToken' });
@@ -144,7 +145,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     });
 
     // POST /auth/logout — refresh token 폐기
-    fastify.post('/auth/logout', async (request, reply) => {
+    fastify.post('/logout', async (request, reply) => {
         const { refreshToken } = request.body as { refreshToken?: string };
         if (!refreshToken) {
             return reply.code(400).send({ error: 'Missing refreshToken' });

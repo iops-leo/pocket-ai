@@ -3,7 +3,7 @@ import crypto from 'crypto';
 const config = new Conf({
     projectName: 'pocket-ai',
     defaults: {
-        serverUrl: 'http://localhost:3001',
+        serverUrl: 'http://localhost:9741',
     },
 });
 // CWD를 해시로 변환 (키 저장용)

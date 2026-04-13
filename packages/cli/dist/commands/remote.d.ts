@@ -1,1 +1,2 @@
-export declare const remoteCommand: any;
+import { Command } from 'commander';
+export declare const remoteCommand: Command;

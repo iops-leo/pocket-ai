@@ -1,1 +1,2 @@
-export declare const statusCommand: any;
+import { Command } from 'commander';
+export declare const statusCommand: Command;

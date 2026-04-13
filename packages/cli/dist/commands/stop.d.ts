@@ -1,1 +1,2 @@
-export declare const stopCommand: any;
+import { Command } from 'commander';
+export declare const stopCommand: Command;
