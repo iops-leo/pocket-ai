@@ -93,7 +93,7 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                     // DB 상태 업데이트
                     const updatePayload: Record<string, any> = {
                         status: 'online',
-                        updated_at: new Date(),
+                        updated_at: new Date().toISOString(),
                     };
                     if (typeof publicKey === 'string' && publicKey.trim()) {
                         updatePayload.public_key = publicKey;
@@ -233,7 +233,7 @@ export function setupSocketIO(io: Server, fastify: FastifyInstance) {
                     // DB 상태 업데이트
                     await db
                         .updateTable('sessions')
-                        .set({ status: 'offline', updated_at: new Date() })
+                        .set({ status: 'offline', updated_at: new Date().toISOString() })
                         .where('id', '=', sessionId)
                         .execute()
                         .catch(() => { /* disconnect 중 DB 실패는 무시 */ });

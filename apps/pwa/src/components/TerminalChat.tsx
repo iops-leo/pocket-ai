@@ -232,7 +232,7 @@ export function TerminalChat({ sessionId, onBack, embedded = false, onRenameSess
     initConnectionRef.current = initConnection;
 
     useEffect(() => {
-        const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9741';
         const socket = io(SERVER_URL, {
             reconnectionDelayMax: 5000,
             reconnectionAttempts: Infinity

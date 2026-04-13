@@ -1,2 +1,1 @@
-import { Command } from 'commander';
-export declare const loginCommand: Command;
+export declare const loginCommand: any;

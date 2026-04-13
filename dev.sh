@@ -23,38 +23,29 @@ check_env() {
 
   if [[ ! -f "$env_file" ]]; then
     warn ".env 파일이 없습니다. $env_file 을 생성합니다..."
-    cat > "$env_file" << 'EOF'
-# PostgreSQL 연결 (필수)
-DATABASE_URL=postgresql://localhost:5432/pocket_ai
+    # JWT_SECRET 자동 생성
+    local generated_secret
+    generated_secret=$(openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64)
+    cat > "$env_file" << EOF
+# ── Auth Mode ────────────────────────────────────────────
+# single: 토큰 기반 싱글유저 인증 (기본값)
+# github: GitHub OAuth 인증
+AUTH_MODE=single
 
-# JWT 서명 키 (필수, 최소 32자)
-JWT_SECRET=change_me_to_a_long_random_secret_at_least_32_chars
+# ── JWT 서명 키 (자동 생성됨) ────────────────────────────
+JWT_SECRET=${generated_secret}
 
-# GitHub OAuth (https://github.com/settings/applications/new)
-GITHUB_CLIENT_ID=your_github_client_id
-GITHUB_CLIENT_SECRET=your_github_client_secret
-GITHUB_CALLBACK_URL=http://localhost:3001/auth/github/callback
-
-# 허용 Origin (쉼표 구분)
-ALLOWED_ORIGINS=http://localhost:3002
-
-# PWA URL (OAuth 콜백 후 리다이렉트)
-PWA_URL=http://localhost:3002
-
-PORT=3001
+# ── 서버 포트 ────────────────────────────────────────────
+PORT=9741
 EOF
-    warn "⚠️  $env_file 를 열어 실제 값으로 채워주세요."
-    warn "   특히 DATABASE_URL, JWT_SECRET, GITHUB_CLIENT_ID/SECRET 은 필수입니다."
+    ok ".env 파일이 자동 생성되었습니다 (싱글유저 모드)"
     echo ""
   fi
 
   # 필수 변수 확인
   source "$env_file"
   local missing=()
-  [[ -z "$DATABASE_URL" || "$DATABASE_URL" == "postgresql://localhost:5432/pocket_ai" ]] && missing+=("DATABASE_URL")
-  [[ -z "$JWT_SECRET" || "$JWT_SECRET" == "change_me_to_a_long_random_secret_at_least_32_chars" ]] && missing+=("JWT_SECRET")
-  [[ -z "$GITHUB_CLIENT_ID" || "$GITHUB_CLIENT_ID" == "your_github_client_id" ]] && missing+=("GITHUB_CLIENT_ID")
-  [[ -z "$GITHUB_CLIENT_SECRET" || "$GITHUB_CLIENT_SECRET" == "your_github_client_secret" ]] && missing+=("GITHUB_CLIENT_SECRET")
+  [[ -z "$JWT_SECRET" ]] && missing+=("JWT_SECRET")
 
   if [[ ${#missing[@]} -gt 0 ]]; then
     err "다음 환경 변수가 설정되지 않았습니다:"
@@ -76,6 +67,15 @@ install_deps() {
   else
     ok "의존성 이미 설치됨"
   fi
+
+  # Wire 패키지 빌드 (server, pwa가 의존)
+  if [[ ! -d "$ROOT/packages/wire/dist" ]]; then
+    log "Wire 패키지 빌드 중..."
+    npm run build --workspace=packages/wire 2>&1 | tail -3
+    ok "Wire 빌드 완료"
+  else
+    ok "Wire 이미 빌드됨"
+  fi
 }
 
 # ── DB 마이그레이션 ─────────────────────────────────────────
@@ -84,17 +84,16 @@ run_migration() {
   if cd "$SERVER_DIR" && npm run migrate:up 2>&1; then
     ok "마이그레이션 완료"
   else
-    err "마이그레이션 실패. DATABASE_URL 과 PostgreSQL 연결을 확인하세요."
-    warn "  Supabase 사용 중이라면 DATABASE_URL이 Supabase 연결 문자열인지 확인하세요."
-    warn "  로컬 PostgreSQL 없이도 Supabase에 직접 마이그레이션됩니다."
+    err "마이그레이션 실패. SQLite 파일 경로를 확인하세요."
+    warn "  기본 경로: apps/server/data/pocket-ai.db"
     exit 1
   fi
 }
 
 # ── 서버 실행 ──────────────────────────────────────────────
 start_server() {
-  kill_port 3001
-  log "서버 시작 (http://localhost:3001)"
+  kill_port 9741
+  log "서버 시작 (http://localhost:9741)"
   cd "$SERVER_DIR"
   # .env 로드해서 dev 실행
   set -a; source .env; set +a
@@ -116,16 +115,16 @@ kill_port() {
 
 # ── PWA 실행 ───────────────────────────────────────────────
 start_pwa() {
-  kill_port 3002
-  log "PWA 시작 (http://localhost:3002)"
+  kill_port 9742
+  log "PWA 시작 (http://localhost:9742)"
   cd "$PWA_DIR"
   npm run dev
 }
 
 # ── 동시 실행 (tmux 없을 경우 백그라운드) ──────────────────
 start_all() {
-  kill_port 3001
-  kill_port 3002
+  kill_port 9741
+  kill_port 9742
   if command -v tmux &>/dev/null; then
     SESSION="pocket-ai"
     tmux kill-session -t "$SESSION" 2>/dev/null || true
@@ -143,8 +142,8 @@ start_all() {
 
     ok "tmux 세션 '$SESSION' 시작됨"
     echo ""
-    echo -e "  ${BLUE}서버${NC}: http://localhost:3001"
-    echo -e "  ${BLUE}PWA ${NC}: http://localhost:3002"
+    echo -e "  ${BLUE}서버${NC}: http://localhost:9741"
+    echo -e "  ${BLUE}PWA ${NC}: http://localhost:9742"
     echo ""
     echo -e "  연결: ${CYAN}tmux attach -t $SESSION${NC}"
     echo -e "  종료: ${CYAN}tmux kill-session -t $SESSION${NC}"
@@ -155,7 +154,7 @@ start_all() {
     warn "tmux 없음 - 서버를 백그라운드로 실행합니다"
     (cd "$SERVER_DIR" && set -a && source .env && set +a && npm run dev) &
     SERVER_PID=$!
-    ok "서버 PID: $SERVER_PID (http://localhost:3001)"
+    ok "서버 PID: $SERVER_PID (http://localhost:9741)"
     sleep 2
 
     log "PWA 시작 (포그라운드)"
@@ -204,8 +203,8 @@ case "$MODE" in
     echo "Usage: $0 [server|pwa|migrate|all]"
     echo ""
     echo "  all     - 서버 + PWA 동시 실행 (기본값, tmux 사용)"
-    echo "  server  - 서버만 실행 (port 3001)"
-    echo "  pwa     - PWA만 실행 (port 3002)"
+    echo "  server  - 서버만 실행 (port 9741)"
+    echo "  pwa     - PWA만 실행 (port 9742)"
     echo "  migrate - DB 마이그레이션만 실행"
     exit 1
     ;;

@@ -33,7 +33,7 @@ export async function tryRefreshToken(): Promise<string | null> {
         if (!refreshToken) return null;
 
         try {
-            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9741';
             const res = await fetch(`${serverUrl}/auth/refresh`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

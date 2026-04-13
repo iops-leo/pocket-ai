@@ -19,9 +19,10 @@ async function generateRefreshToken(userId: string): Promise<string> {
 
     await db.insertInto('refresh_tokens')
         .values({
+            id: crypto.randomUUID(),
             user_id: userId,
             token_hash: tokenHash,
-            expires_at: expiresAt,
+            expires_at: expiresAt.toISOString(),
         })
         .execute();
 
@@ -29,6 +30,54 @@ async function generateRefreshToken(userId: string): Promise<string> {
 }
 
 export async function authRoutes(fastify: FastifyInstance) {
+
+    // GET /auth/mode — Return current auth mode
+    fastify.get('/mode', async () => {
+        const authMode = process.env.AUTH_MODE || 'single';
+        return { mode: authMode };
+    });
+
+    // POST /auth/token — Single-user token login
+    fastify.post('/token', async (request, reply) => {
+        const { token } = request.body as { token?: string };
+        const setupToken = (fastify as any).setupToken;
+
+        if (!setupToken) {
+            return reply.code(404).send({ error: 'Token auth not available. Server is in GitHub OAuth mode.' });
+        }
+
+        if (!token || token !== setupToken) {
+            return reply.code(401).send({ error: 'Invalid token' });
+        }
+
+        // Find or create the single user
+        const email = 'admin@localhost';
+        let user = await db.selectFrom('users').where('email', '=', email).selectAll().executeTakeFirst();
+
+        if (!user) {
+            const userId = crypto.randomUUID();
+            await db.insertInto('users')
+                .values({ id: userId, email, name: 'Admin' })
+                .execute();
+            user = await db.selectFrom('users').where('id', '=', userId).selectAll().executeTakeFirstOrThrow();
+        } else {
+            await db.updateTable('users')
+                .set({ last_login_at: new Date().toISOString() })
+                .where('id', '=', user.id)
+                .execute();
+        }
+
+        const appToken = fastify.jwt.sign({
+            sub: user.id,
+            email: user.email,
+            name: user.name || 'Admin',
+            login: 'admin',
+        }, { expiresIn: '30d' });
+
+        const refreshToken = await generateRefreshToken(user.id);
+
+        return { token: appToken, refreshToken };
+    });
 
     // POST /auth/refresh — access token 갱신 (refresh token rotation)
     fastify.post('/auth/refresh', async (request, reply) => {
@@ -51,7 +100,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         if (new Date(row.expires_at) < new Date()) {
             // 만료된 토큰 폐기
             await db.updateTable('refresh_tokens')
-                .set({ revoked_at: new Date() })
+                .set({ revoked_at: new Date().toISOString() })
                 .where('id', '=', row.id)
                 .execute();
             return reply.code(401).send({ error: 'Refresh token expired' });
@@ -59,7 +108,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
         // 기존 refresh token 폐기 (rotation)
         await db.updateTable('refresh_tokens')
-            .set({ revoked_at: new Date() })
+            .set({ revoked_at: new Date().toISOString() })
             .where('id', '=', row.id)
             .execute();
 
@@ -103,7 +152,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
         const tokenHash = hashToken(refreshToken);
         await db.updateTable('refresh_tokens')
-            .set({ revoked_at: new Date() })
+            .set({ revoked_at: new Date().toISOString() })
             .where('token_hash', '=', tokenHash)
             .where('revoked_at', 'is', null)
             .execute();
@@ -149,14 +198,14 @@ export async function authRoutes(fastify: FastifyInstance) {
             let user = await db.selectFrom('users').where('email', '=', primaryEmail).selectAll().executeTakeFirst();
 
             if (!user) {
-                const result = await db.insertInto('users')
-                    .values({ email: primaryEmail, name })
-                    .returningAll()
-                    .executeTakeFirstOrThrow();
-                user = result;
+                const userId = crypto.randomUUID();
+                await db.insertInto('users')
+                    .values({ id: userId, email: primaryEmail, name })
+                    .execute();
+                user = await db.selectFrom('users').where('id', '=', userId).selectAll().executeTakeFirstOrThrow();
             } else {
                 await db.updateTable('users')
-                    .set({ last_login_at: new Date() })
+                    .set({ last_login_at: new Date().toISOString() })
                     .where('id', '=', user.id)
                     .execute();
             }
@@ -170,6 +219,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             if (!oauth) {
                 await db.insertInto('oauth_accounts')
                     .values({
+                        id: crypto.randomUUID(),
                         user_id: user.id,
                         provider: 'github',
                         provider_account_id: providerAccountId
@@ -196,7 +246,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             if (cliPort && cliPort >= 1024 && cliPort <= 65535) {
                 reply.redirect(`http://localhost:${cliPort}/callback?token=${appToken}&refreshToken=${refreshToken}`);
             } else {
-                const frontendUrl = process.env.PWA_URL || 'http://localhost:3002';
+                const frontendUrl = process.env.PWA_URL || 'http://localhost:9742';
                 reply.redirect(`${frontendUrl}/login?token=${appToken}&refreshToken=${refreshToken}`);
             }
 

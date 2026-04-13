@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import crypto from 'crypto';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
@@ -55,53 +56,69 @@ setInterval(() => {
 
 // Setup CORS
 fastify.register(cors, {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:3002'],
+    origin: process.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:9742'],
 });
 
-if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
-    throw new Error('GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables are required');
-}
+const authMode = process.env.AUTH_MODE || 'single';
 
-// OAuth CSRF 방어용 state 저장소 (10분 TTL)
-const pendingOAuthStates = new Set<string>();
+if (authMode === 'github') {
+    if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+        throw new Error('GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are required when AUTH_MODE=github');
+    }
 
-fastify.register(oauthPlugin, {
-    name: 'githubOAuth2',
-    credentials: {
-        client: {
-            id: process.env.GITHUB_CLIENT_ID,
-            secret: process.env.GITHUB_CLIENT_SECRET
+    // OAuth CSRF 방어용 state 저장소 (10분 TTL)
+    const pendingOAuthStates = new Set<string>();
+
+    fastify.register(oauthPlugin, {
+        name: 'githubOAuth2',
+        credentials: {
+            client: {
+                id: process.env.GITHUB_CLIENT_ID,
+                secret: process.env.GITHUB_CLIENT_SECRET
+            },
+            auth: (oauthPlugin as any).GITHUB_CONFIGURATION
         },
-        auth: (oauthPlugin as any).GITHUB_CONFIGURATION
-    },
-    startRedirectPath: '/auth/github',
-    callbackUri: process.env.GITHUB_CALLBACK_URL || 'http://localhost:3001/auth/github/callback',
-    scope: ['user:email'],
-    // CLI 로그인 지원: cli_port 쿼리 파라미터를 state에 인코딩
-    generateStateFunction: (request: any) => {
-        const cliPort = request.query?.cli_port;
-        const random = Math.random().toString(36).slice(2, 10);
-        const state = cliPort ? `${random}_cli_${cliPort}` : random;
-        pendingOAuthStates.add(state);
-        // 10분 후 자동 만료
-        setTimeout(() => pendingOAuthStates.delete(state), 10 * 60 * 1000);
-        return state;
-    },
-    checkStateFunction: (request: any, callback: any) => {
-        const state = (request.query as any)?.state as string;
-        if (!state || !pendingOAuthStates.has(state)) {
-            callback(new Error('Invalid OAuth state'));
-            return;
-        }
-        pendingOAuthStates.delete(state);
-        callback();
-    },
-} as any);
+        startRedirectPath: '/auth/github',
+        callbackUri: process.env.GITHUB_CALLBACK_URL || 'http://localhost:9741/auth/github/callback',
+        scope: ['user:email'],
+        generateStateFunction: (request: any) => {
+            const cliPort = request.query?.cli_port;
+            const random = Math.random().toString(36).slice(2, 10);
+            const state = cliPort ? `${random}_cli_${cliPort}` : random;
+            pendingOAuthStates.add(state);
+            setTimeout(() => pendingOAuthStates.delete(state), 10 * 60 * 1000);
+            return state;
+        },
+        checkStateFunction: (request: any, callback: any) => {
+            const state = (request.query as any)?.state as string;
+            if (!state || !pendingOAuthStates.has(state)) {
+                callback(new Error('Invalid OAuth state'));
+                return;
+            }
+            pendingOAuthStates.delete(state);
+            callback();
+        },
+    } as any);
+} else {
+    // Single-user mode: generate setup token on first run
+    const setupToken = process.env.AUTH_TOKEN || crypto.randomBytes(32).toString('base64url');
+    if (!process.env.AUTH_TOKEN) {
+        console.log('\n========================================');
+        console.log('  Pocket AI - Single User Mode');
+        console.log('========================================');
+        console.log(`  Setup Token: ${setupToken}`);
+        console.log('  Use this token to login from PWA or CLI');
+        console.log('  Set AUTH_TOKEN env var to use a fixed token');
+        console.log('========================================\n');
+    }
+    // Store on fastify instance for auth route access
+    (fastify as any).setupToken = setupToken;
+}
 
 // Setup Socket.IO
 const io = new Server(fastify.server, {
     cors: {
-        origin: process.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:3002'],
+        origin: process.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:9742'],
     },
     // CLI가 무거운 작업 중 ping 응답 지연으로 disconnect 방지
     pingTimeout: 60000,     // 60초 (기본 20초)
@@ -121,7 +138,7 @@ fastify.get('/ping', async (request, reply) => {
 
 const start = async () => {
     try {
-        const port = parseInt(process.env.PORT || '3001', 10);
+        const port = parseInt(process.env.PORT || '9741', 10);
         await fastify.listen({ port, host: '0.0.0.0' });
         console.log(`Server listening at http://0.0.0.0:${port}`);
 

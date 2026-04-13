@@ -1,30 +1,22 @@
-import { Pool } from 'pg';
-import { Kysely, PostgresDialect, Generated } from 'kysely';
+import BetterSqlite3 from 'better-sqlite3';
+import { Kysely, SqliteDialect, Generated } from 'kysely';
+import { mkdirSync } from 'fs';
+import { dirname } from 'path';
 
 export interface UserTable {
-    id: Generated<string>;
+    id: string;
     email: string;
     name: string | null;
-    created_at: Generated<Date>;
-    last_login_at: Date | null;
+    created_at: Generated<string>;
+    last_login_at: string | null;
 }
 
 export interface OAuthAccountTable {
-    id: Generated<string>;
+    id: string;
     user_id: string;
     provider: string;
     provider_account_id: string;
-    created_at: Generated<Date>;
-}
-
-export interface SubscriptionTable {
-    id: Generated<string>;
-    user_id: string;
-    status: string; // 'active', 'canceled', 'past_due'
-    plan: string;   // 'free', 'pro', 'team'
-    current_period_end: Date | null;
-    created_at: Generated<Date>;
-    updated_at: Generated<Date>;
+    created_at: Generated<string>;
 }
 
 export interface SessionTable {
@@ -33,8 +25,8 @@ export interface SessionTable {
     public_key: string;  // ECDH 공개키 (Base64)
     metadata: string;    // JSON string (hostname, engine 등)
     status: string;      // 'online' | 'offline'
-    created_at: Generated<Date>;
-    updated_at: Generated<Date>;
+    created_at: Generated<string>;
+    updated_at: Generated<string>;
 }
 
 export interface EncryptedBody {
@@ -43,49 +35,39 @@ export interface EncryptedBody {
 }
 
 export interface MessageTable {
-    id: Generated<string>;
+    id: string;
     session_id: string;
     seq: number;
     sender: 'cli' | 'pwa';
-    encrypted_body: EncryptedBody;  // 암호화된 메시지 (서버는 복호화 안함)
-    created_at: Generated<Date>;
+    encrypted_body: string;  // 암호화된 메시지 (서버는 복호화 안함)
+    created_at: Generated<string>;
 }
 
 export interface RefreshTokenTable {
-    id: Generated<string>;
+    id: string;
     user_id: string;
     token_hash: string;
-    expires_at: Date;
-    created_at: Generated<Date>;
-    revoked_at: Date | null;
+    expires_at: string;
+    created_at: Generated<string>;
+    revoked_at: string | null;
 }
 
 export interface Database {
     users: UserTable;
     oauth_accounts: OAuthAccountTable;
-    subscriptions: SubscriptionTable;
     sessions: SessionTable;
     messages: MessageTable;
     refresh_tokens: RefreshTokenTable;
 }
 
-// Ensure you set DATABASE_URL in .env
-// Parse URL manually so ssl: { rejectUnauthorized: false } is never overridden
-const dbUrl = new URL(process.env.DATABASE_URL!);
-const dialect = new PostgresDialect({
-    pool: new Pool({
-        host: dbUrl.hostname,
-        port: parseInt(dbUrl.port || '5432'),
-        user: dbUrl.username,
-        password: dbUrl.password,
-        database: dbUrl.pathname.slice(1),
-        max: 10,
-        ssl: dbUrl.hostname.includes('supabase.com')
-            ? { rejectUnauthorized: false }
-            : false,
-    })
-});
+// Auto-create directory for the SQLite database file
+const dbPath = process.env.DATABASE_PATH || './data/pocket-ai.db';
+mkdirSync(dirname(dbPath), { recursive: true });
 
-export const db = new Kysely<Database>({
-    dialect,
-});
+const database = new BetterSqlite3(dbPath);
+database.pragma('journal_mode = WAL');
+database.pragma('foreign_keys = ON');
+
+const dialect = new SqliteDialect({ database });
+
+export const db = new Kysely<Database>({ dialect });

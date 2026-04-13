@@ -38,8 +38,8 @@ export async function loadSessionsFromDB(): Promise<void> {
                 userId: row.user_id,
                 socketId: '',
                 // offlineSince 설정: DB cleanup과 메모리 cleanup 기준 통일
-                offlineSince: row.updated_at instanceof Date ? row.updated_at.getTime() : Date.now(),
-                createdAt: row.created_at instanceof Date ? row.created_at.getTime() : undefined,
+                offlineSince: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+                createdAt: row.created_at ? new Date(row.created_at).getTime() : undefined,
             });
         }
 
@@ -57,7 +57,7 @@ setInterval(async () => {
         const deleted = await db
             .deleteFrom('sessions')
             .where('status', '=', 'offline')
-            .where('updated_at', '<', cutoff)
+            .where('updated_at', '<', cutoff.toISOString())
             .executeTakeFirst();
         if (deleted.numDeletedRows > 0n) {
             // 메모리에서도 제거
@@ -280,7 +280,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
             .updateTable('sessions')
             .set({
                 metadata: JSON.stringify(mergedMetadata),
-                updated_at: new Date(),
+                updated_at: new Date().toISOString(),
             })
             .where('id', '=', sessionId)
             .execute();

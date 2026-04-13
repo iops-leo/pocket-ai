@@ -56,7 +56,10 @@
     "step3_code": "pocket-ai",
     "step3_suffix": " to start the daemon, and your PC will appear here.",
     "e2eNotice": "All communications are end-to-end encrypted with AES-256-GCM",
-    "loggingIn": "Signing in..."
+    "loggingIn": "Signing in...",
+    "loginWithToken": "Login with Token",
+    "tokenPlaceholder": "Enter the token from your server console",
+    "invalidToken": "Invalid token. Please try again."
   },
   "dashboard": {
     "refresh": "Refresh",

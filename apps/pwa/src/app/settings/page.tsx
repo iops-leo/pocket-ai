@@ -214,14 +214,9 @@ export default function SettingsPage() {
                         </div>
                         <div className="flex items-center justify-between">
                             <span className="text-gray-500">{t('pwaUrl')}</span>
-                            <a
-                                href="https://pocket-ai-pwa.vercel.app"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-400 hover:text-blue-300 font-mono text-xs transition-colors"
-                            >
-                                pocket-ai-pwa.vercel.app
-                            </a>
+                            <span className="text-gray-300 font-mono text-xs">
+                                {typeof window !== 'undefined' ? window.location.host : '-'}
+                            </span>
                         </div>
                     </div>
                 </section>

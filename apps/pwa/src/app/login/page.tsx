@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Github, Loader2, Terminal, Shield } from 'lucide-react';
+import { Github, Key, Loader2, Terminal, Shield } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 function LoginContent() {
@@ -11,6 +11,45 @@ function LoginContent() {
     const [isProcessingToken, setIsProcessingToken] = useState(false);
     const [authError, setAuthError] = useState<string | null>(null);
     const t = useTranslations('login');
+    const [authMode, setAuthMode] = useState<'single' | 'github' | null>(null);
+    const [setupToken, setSetupToken] = useState('');
+    const [isLoggingIn, setIsLoggingIn] = useState(false);
+    const [tokenError, setTokenError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9741';
+        fetch(`${serverUrl}/auth/mode`)
+            .then(res => res.json())
+            .then(data => setAuthMode(data.mode))
+            .catch(() => setAuthMode('single'));
+    }, []);
+
+    const handleTokenLogin = async () => {
+        setIsLoggingIn(true);
+        setTokenError(null);
+        try {
+            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9741';
+            const res = await fetch(`${serverUrl}/auth/token`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: setupToken }),
+            });
+            if (!res.ok) {
+                setTokenError(t('invalidToken'));
+                return;
+            }
+            const data = await res.json();
+            localStorage.setItem('pocket_ai_token', data.token);
+            if (data.refreshToken) {
+                localStorage.setItem('pocket_ai_refresh_token', data.refreshToken);
+            }
+            router.replace('/dashboard');
+        } catch {
+            setTokenError(t('serverError'));
+        } finally {
+            setIsLoggingIn(false);
+        }
+    };
 
     useEffect(() => {
         // OAuth callback - store token + refresh token
@@ -75,7 +114,7 @@ function LoginContent() {
     }, [searchParams, router, t]);
 
     const handleLogin = () => {
-        const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9741';
         const authUrl = `${serverUrl}/auth/github`;
         // 팝업으로 열기 (BroadcastChannel로 원래 창에서 dashboard 이동)
         const popup = window.open(authUrl, 'github_oauth', 'width=600,height=700,left=400,top=100');
@@ -113,13 +152,42 @@ function LoginContent() {
                     </div>
                 )}
 
-                <button
-                    onClick={handleLogin}
-                    className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-gray-100 rounded-xl text-gray-900 font-bold transition-all duration-200 shadow-lg shadow-white/5"
-                >
-                    <Github size={22} />
-                    {t('loginWithGithub')}
-                </button>
+                {authMode === 'github' ? (
+                    <button
+                        onClick={handleLogin}
+                        className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-gray-100 rounded-xl text-gray-900 font-bold transition-all duration-200 shadow-lg shadow-white/5"
+                    >
+                        <Github size={22} />
+                        {t('loginWithGithub')}
+                    </button>
+                ) : authMode === 'single' ? (
+                    <div className="space-y-3">
+                        <input
+                            type="password"
+                            value={setupToken}
+                            onChange={(e) => setSetupToken(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleTokenLogin()}
+                            placeholder={t('tokenPlaceholder')}
+                            className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono text-sm"
+                            autoFocus
+                        />
+                        {tokenError && (
+                            <p className="text-red-400 text-sm">{tokenError}</p>
+                        )}
+                        <button
+                            onClick={handleTokenLogin}
+                            disabled={!setupToken || isLoggingIn}
+                            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-bold transition-all duration-200"
+                        >
+                            {isLoggingIn ? <Loader2 size={20} className="animate-spin" /> : <Key size={20} />}
+                            {t('loginWithToken')}
+                        </button>
+                    </div>
+                ) : (
+                    <div className="flex justify-center py-4">
+                        <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
+                    </div>
+                )}
 
                 <div className="mt-8 text-left bg-gray-900/50 border border-gray-800 rounded-2xl p-6">
                     <h2 className="text-lg font-semibold text-gray-200 mb-5 flex items-center gap-2">

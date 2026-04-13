@@ -11,8 +11,12 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "./dev.sh",
+    "setup": "npm install && npm run build:wire && npm run migrate",
+    "build:wire": "npm run build --workspace=packages/wire",
+    "migrate": "npm run migrate:up --workspace=apps/server",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true"
+    "postinstall": "npm run build:wire && chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true"
   },
   "keywords": [],
   "author": "",

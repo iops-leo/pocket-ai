@@ -4,14 +4,41 @@ import http from 'http';
 import { URL } from 'url';
 import { setToken, setRefreshToken, getServerUrl, getToken } from '../config.js';
 export const loginCommand = new Command('login')
-    .description('GitHub OAuth로 로그인')
+    .description('로그인 (싱글유저: 토큰, GitHub OAuth 모두 지원)')
     .option('--server <url>', '서버 URL 지정')
+    .option('--token <token>', '토큰으로 직접 로그인 (싱글유저 모드)')
     .action(async (options) => {
     const serverUrl = options.server || getServerUrl();
     const existingToken = getToken();
     if (existingToken) {
         console.log('이미 로그인되어 있습니다. pocket-ai logout 후 다시 시도하세요.');
         process.exit(0);
+    }
+    // Token-based login (single-user mode)
+    if (options.token) {
+        try {
+            const res = await fetch(`${serverUrl}/auth/token`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: options.token }),
+            });
+            if (!res.ok) {
+                console.log('토큰이 올바르지 않습니다.');
+                process.exit(1);
+            }
+            const data = await res.json();
+            setToken(data.token);
+            if (data.refreshToken) {
+                setRefreshToken(data.refreshToken);
+            }
+            console.log('\n로그인 성공!');
+            console.log('이제 pocket-ai start로 세션을 시작할 수 있습니다.\n');
+            process.exit(0);
+        }
+        catch {
+            console.log('서버에 연결할 수 없습니다:', serverUrl);
+            process.exit(1);
+        }
     }
     const localPort = 9876;
     const server = http.createServer(async (req, res) => {

@@ -82,7 +82,7 @@ export default function DashboardPage() {
             setError(null);
             if (showLoader) setIsLoading(true);
 
-            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9741';
             const res = await fetchWithAuth(`${serverUrl}/api/sessions`);
 
             if (res.status === 401) {
@@ -108,7 +108,7 @@ export default function DashboardPage() {
         if (!getToken()) return;
 
         try {
-            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9741';
             const res = await fetchWithAuth(`${serverUrl}/api/sessions/recent-paths?limit=8`);
 
             if (!res.ok) return;
@@ -149,7 +149,7 @@ export default function DashboardPage() {
         const token = getToken();
         if (!token) return;
 
-        const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9741';
 
         const socket = io(serverUrl, {
             auth: { token, role: 'pwa' },
@@ -226,7 +226,7 @@ export default function DashboardPage() {
 
         const keyPair = await generateECDHKeyPair();
         const publicKey = await exportPublicKey(keyPair.publicKey);
-        const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9741';
 
         const res = await fetchWithAuth(`${serverUrl}/api/sessions`, {
             method: 'POST',
@@ -288,7 +288,7 @@ export default function DashboardPage() {
         if (!trimmedName) return;
 
         try {
-            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9741';
             const res = await fetchWithAuth(`${serverUrl}/api/sessions/${sessionId}`, {
                 method: 'PATCH',
                 headers: {
@@ -333,7 +333,7 @@ export default function DashboardPage() {
         }
 
         try {
-            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9741';
             const res = await fetchWithAuth(`${serverUrl}/api/sessions/${sessionId}`, {
                 method: 'DELETE',
             });

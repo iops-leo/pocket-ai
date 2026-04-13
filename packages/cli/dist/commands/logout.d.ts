@@ -1,2 +1,1 @@
-import { Command } from 'commander';
-export declare const logoutCommand: Command;
+export declare const logoutCommand: any;
